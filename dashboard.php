@@ -1,3 +1,62 @@
+<?php session_start();
+$host = "localhost";
+$username = "root";
+$password = "";
+$database = "nutrition_tracker";
+
+$conn = new mysqli($host, $username, $password, $database);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+if (!isset($_SESSION["user_id"])) {
+    echo json_encode(["error" => "User not logged in"]);
+    exit();
+}
+
+$user_id = $_SESSION["user_id"];
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $meal_name = $_POST['meal_name'];
+    $calories = $_POST['calories'];
+    $protein = $_POST['protein'];
+    $carbs = $_POST['carbs'];
+
+    $stmt = $conn->prepare("INSERT INTO meals (user_id, meal_name, calories, protein, carbs) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("isddd", $user_id, $meal_name, $calories, $protein, $carbs);
+
+    if ($stmt->execute()) {
+        echo json_encode(["success" => true]);
+    } else {
+        echo json_encode(["error" => "Error adding meal: " . $conn->error]);
+    }
+
+    $stmt->close();
+}
+
+// Get current date and the start of the current week (Monday)
+$currentDate = date('Y-m-d');
+$startOfWeek = date('Y-m-d', strtotime('monday this week'));
+
+// Default period is today
+$period = isset($_GET['period']) ? $_GET['period'] : 'today';
+
+// Fetch today's intake
+$totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs
+                         FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
+$stmt = $conn->prepare($totalIntakeQuery);
+$stmt->bind_param("i", $user_id);
+
+
+$stmt->execute();
+$totalIntakeResult = $stmt->get_result()->fetch_assoc();
+$totalCalories = $totalIntakeResult['total_calories'] ?: 0;
+$totalProtein = $totalIntakeResult['total_protein'] ?: 0;
+$totalCarbs = $totalIntakeResult['total_carbs'] ?: 0;
+$stmt->close();
+?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -39,11 +98,11 @@
             }
         }
         // JavaScript to toggle dropdown
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", function () {
             const toggleBtn = document.getElementById("dashboardToggle");
             const dropdownMenu = document.getElementById("dashboardDropdown");
 
-            toggleBtn.addEventListener("click", function(event) {
+            toggleBtn.addEventListener("click", function (event) {
                 event.preventDefault();
                 dropdownMenu.classList.toggle("max-h-0");
                 dropdownMenu.classList.toggle("opacity-0");
@@ -51,7 +110,7 @@
                 dropdownMenu.classList.toggle("opacity-100");
             });
         });
-        document.addEventListener("DOMContentLoaded", function() {
+        document.addEventListener("DOMContentLoaded", function () {
             var options = {
                 series: [75.55],
                 chart: {
@@ -160,14 +219,17 @@
                                 <!-- Metric Group One -->
                                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6">
                                     <!-- Metric Item Start -->
-                                    <div class="w-full max-w-[20rem] md:max-w-[24rem] lg:max-w-[28rem] rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-md mx-auto flex flex-col space-y-3">
+                                    <div
+                                        class="w-full max-w-[20rem] md:max-w-[24rem] lg:max-w-[28rem] rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-md mx-auto flex flex-col space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div>
                                                 <span class="text-sm text-gray-500">Calorie Intake</span>
                                                 <h4 class="mt-1 text-lg font-bold text-gray-800">3,782 cal</h4>
                                             </div>
-                                            <span class="flex items-center gap-1 rounded-full bg-red-100 py-0.5 px-2 text-sm font-medium text-red-600">
-                                                <svg class="fill-current" width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+                                            <span
+                                                class="flex items-center gap-1 rounded-full bg-red-100 py-0.5 px-2 text-sm font-medium text-red-600">
+                                                <svg class="fill-current" width="12" height="12" viewBox="0 0 12 12"
+                                                    xmlns="http://www.w3.org/2000/svg">
                                                     <path fill-rule="evenodd" clip-rule="evenodd"
                                                         d="M5.31462 10.3761C5.45194 10.5293 5.65136 10.6257 5.87329 10.6257C5.8736 10.6257 5.8739 10.6257 5.87421 10.6257C6.0663 10.6259 6.25845 10.5527 6.40505 10.4062L9.40514 7.4082C9.69814 7.11541 9.69831 6.64054 9.40552 6.34754C9.11273 6.05454 8.63785 6.05438 8.34486 6.34717L6.62329 8.06753V1.875C6.62329 1.46079 6.28751 1.125 5.87329 1.125C5.45908 1.125 5.12329 1.46079 5.12329 1.875V8.06422L3.40516 6.34719C3.11218 6.05439 2.6373 6.05454 2.3445 6.34752C2.0517 6.64051 2.05185 7.11538 2.34484 7.40818L5.31462 10.3761Z">
                                                     </path>
@@ -184,14 +246,17 @@
 
 
                                     <!-- Metric Item Start -->
-                                    <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-md md:p-5 flex flex-col space-y-3">
+                                    <div
+                                        class="rounded-2xl border border-gray-200 bg-white p-4 shadow-md md:p-5 flex flex-col space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div>
                                                 <span class="text-sm text-gray-500">Current Weight</span>
                                                 <h4 class="mt-1 text-lg font-bold text-gray-800">52 kg</h4>
                                             </div>
-                                            <span class="flex items-center gap-1 rounded-full bg-red-100 py-0.5 px-2 text-sm font-medium text-red-600">
-                                                <svg class="fill-current" width="12" height="12" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg">
+                                            <span
+                                                class="flex items-center gap-1 rounded-full bg-red-100 py-0.5 px-2 text-sm font-medium text-red-600">
+                                                <svg class="fill-current" width="12" height="12" viewBox="0 0 12 12"
+                                                    xmlns="http://www.w3.org/2000/svg">
                                                     <path fill-rule="evenodd" clip-rule="evenodd"
                                                         d="M5.31462 10.3761C5.45194 10.5293 5.65136 10.6257 5.87329 10.6257C5.8736 10.6257 5.8739 10.6257 5.87421 10.6257C6.0663 10.6259 6.25845 10.5527 6.40505 10.4062L9.40514 7.4082C9.69814 7.11541 9.69831 6.64054 9.40552 6.34754C9.11273 6.05454 8.63785 6.05438 8.34486 6.34717L6.62329 8.06753V1.875C6.62329 1.46079 6.28751 1.125 5.87329 1.125C5.45908 1.125 5.12329 1.46079 5.12329 1.875V8.06422L3.40516 6.34719C3.11218 6.05439 2.6373 6.05454 2.3445 6.34752C2.0517 6.64051 2.05185 7.11538 2.34484 7.40818L5.31462 10.3761Z">
                                                     </path>
@@ -202,10 +267,14 @@
 
                                         <!-- Weight Input -->
                                         <div class="flex items-center justify-between">
-                                            <label for="weight-input" class="text-sm font-medium text-gray-700">Update Weight (kg):</label>
+                                            <label for="weight-input" class="text-sm font-medium text-gray-700">Update
+                                                Weight (kg):</label>
                                             <div class="flex items-center gap-2">
-                                                <input id="weight-input" type="number" class="w-20 p-1 border rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-300 focus:outline-none" min="0" step="0.1">
-                                                <button class="px-3 py-1 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">Save</button>
+                                                <input id="weight-input" type="number"
+                                                    class="w-20 p-1 border rounded-lg text-sm text-center focus:ring-2 focus:ring-blue-300 focus:outline-none"
+                                                    min="0" step="0.1">
+                                                <button
+                                                    class="px-3 py-1 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition">Save</button>
                                             </div>
                                         </div>
                                     </div>
@@ -215,64 +284,75 @@
                                 <!-- Metric Group One -->
 
                                 <!-- ====== Chart One Start -->
-                                <div class="overflow-hidden rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-md max-h-90 overflow-y-auto">
+                                <div
+                                    class="overflow-hidden rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-md max-h-90 overflow-y-auto">
                                     <div class="flex items-center justify-between mb-3">
                                         <h3 class="text-lg font-semibold text-gray-800">Daily Log Checker</h3>
                                     </div>
 
-                                    <div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition p-4 flex items-center justify-between">
+                                    <div
+                                        class="w-full rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition p-4 flex items-center justify-between">
                                         <div class="flex-1">
                                             <h5 class="text-md font-semibold text-gray-900">Drank water?</h5>
-                                            <p class="text-sm text-gray-700">Have you had enough glasses of water today?</p>
+                                            <p class="text-sm text-gray-700">Have you had enough glasses of water today?
+                                            </p>
                                         </div>
 
                                         <!-- Check Button -->
                                         <button id="check-button" onclick="toggleCheck()"
                                             class="w-12 h-12 flex items-center justify-center rounded-full border-2 border-gray-400 text-gray-400 transition-all duration-300 ease-in-out hover:bg-gray-100 focus:outline-none">
-                                            <svg id="check-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                            <svg id="check-icon" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                                viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                                                class="size-6">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="m4.5 12.75 6 6 9-13.5" />
                                             </svg>
 
                                         </button>
                                     </div>
 
                                     <!-- Saved Message -->
-                                    <div id="saved-message" class="mt-1 text-sm text-green-600 font-semibold opacity-0 transition-opacity duration-500">
+                                    <div id="saved-message"
+                                        class="mt-1 text-sm text-green-600 font-semibold opacity-0 transition-opacity duration-500">
                                         ✅ Great Job!
                                     </div>
 
                                     <!-- Food Intake -->
-                                    <div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition p-3 flex items-center justify-between mt-2">
+                                    <div
+                                        class="w-full rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition p-3 flex items-center justify-between mt-2">
                                         <div class="flex-1">
                                             <h5 class="text-md font-semibold text-gray-900">Food Eaten</h5>
                                             <p class="text-sm text-gray-700">What did you eat today?</p>
                                         </div>
                                         <div class="flex items-center space-x-2">
-                                            <input type="text" id="foodInput" class="border border-gray-300 p-2 rounded-lg text-sm" placeholder="Enter food name" />
-                                            <button class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600 transition" onclick="fetchCalories()">Add</button>
+                                            <input type="text" id="foodInput"
+                                                class="border border-gray-300 p-2 rounded-lg text-sm"
+                                                placeholder="Enter food name" />
+                                            <button type="submit" onclick="fetchCalories()"
+                                                class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600 transition">Add</button>
                                         </div>
                                     </div>
                                     <!-- Calories, Protein, Carbs -->
                                     <div class="grid grid-cols-3 gap-2 mt-3">
                                         <!-- Calories -->
-                                        <div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
+                                        <div
+                                            class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
                                             <h5 class="text-md font-semibold text-gray-900">Calories</h5>
-                                            <p class="text-xs text-gray-600">Daily calorie requirement.</p>
-                                            <div id="bmr1" class="text-lg text-gray-900 font-bold mt-1">0 kcal</div>
+                                            <div id="bmr1" class="text-lg text-gray-900 font-bold mt-1"><?= htmlspecialchars($totalCalories) ?> kcal</div>
                                         </div>
 
                                         <!-- Protein -->
-                                        <div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
+                                        <div
+                                            class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
                                             <h5 class="text-md font-semibold text-gray-900">Protein</h5>
-                                            <p class="text-xs text-gray-600">Required for muscle maintenance.</p>
-                                            <div id="bmr2" class="text-lg text-gray-900 font-bold mt-1">0 g</div>
+                                            <div id="bmr2" class="text-lg text-gray-900 font-bold mt-1"><?= htmlspecialchars($totalProtein) ?> g</div>
                                         </div>
 
                                         <!-- Carbohydrates -->
-                                        <div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
+                                        <div
+                                            class="w-full rounded-lg border border-gray-200 bg-white shadow-sm p-3 text-center">
                                             <h5 class="text-md font-semibold text-gray-900">Carbs</h5>
-                                            <p class="text-xs text-gray-600">Primary source of energy.</p>
-                                            <div id="bmr3" class="text-lg text-gray-900 font-bold mt-1">0 g</div>
+                                            <div id="bmr3" class="text-lg text-gray-900 font-bold mt-1"><?= htmlspecialchars($totalCarbs) ?> g</div>
                                         </div>
                                     </div>
                                 </div>
@@ -287,7 +367,8 @@
                                 <!-- Chart Container -->
                                 <div
                                     class="rounded-2xl border border-gray-200 bg-gray-100 h-full flex flex-col shadow-md">
-                                    <div class="shadow-default rounded-2xl bg-white px-4 md:px-5 pb-6 pt-5 flex flex-col h-full">
+                                    <div
+                                        class="shadow-default rounded-2xl bg-white px-4 md:px-5 pb-6 pt-5 flex flex-col h-full">
 
                                         <!-- Title Section -->
                                         <div class="flex flex-col sm:flex-row justify-between items-start ">
