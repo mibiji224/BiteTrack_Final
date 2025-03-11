@@ -16,10 +16,10 @@ $data = json_decode(file_get_contents("php://input"), true);
 
 if ($data) {
     // Sanitize input data to prevent SQL injection
-    $name = $connect->real_escape_string($data["first_name"]);
-    $age = (int) $data["age"];
-    $height = (float) $data["height"];
-    $weight = (float) $data["weight"];
+    $name = $connect->real_escape_string($data["name"]);
+    $age = (int)$data["age"];
+    $height = (float)$data["height"];
+    $weight = (float)$data["weight"];
 
     // Check DB connection
     if ($connect->connect_error) {
@@ -28,7 +28,7 @@ if ($data) {
     }
 
     // Update the user's profile based on their user_id
-    $sql = "UPDATE users SET first_name='$name', age='$age', height='$height', weight='$weight' WHERE user_id='$user_id'";
+    $sql = "UPDATE users SET name='$name', age='$age', height='$height', weight='$weight' WHERE id='$user_id'";
 
     if ($connect->query($sql) === TRUE) {
         echo json_encode(["success" => true, "message" => "Profile updated successfully"]);
