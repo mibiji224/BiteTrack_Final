@@ -11,7 +11,7 @@ $user_id = $_SESSION['user_id']; // Get logged-in user ID
 $today = date('Y-m-d');
 
 // Fetch the most recent **daily goal** for the user
-$sql_goal = "SELECT calories, protein, carbs, date_set FROM daily_goals WHERE user_id = ? ORDER BY date_set DESC LIMIT 1";
+$sql_goal = "SELECT calories, protein, carbs FROM daily_goals WHERE user_id = ? ORDER BY date_set DESC LIMIT 1";
 $stmt = $connect->prepare($sql_goal);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -23,7 +23,7 @@ $dailyGoal = [
     "calories" => $goal['calories'] ?? 0,
     "protein" => $goal['protein'] ?? 0,
     "carbs" => $goal['carbs'] ?? 0
-    "date_set" => $goal['date_set'] ?? 0
+
 
 ];
 

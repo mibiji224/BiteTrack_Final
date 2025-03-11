@@ -1,7 +1,11 @@
 <?php
 include 'php_action/fetch_goals.php';
 include 'php_action/get_profile.php';
+
+
+
 ?>
+
 
 
 <!DOCTYPE html>
@@ -152,40 +156,38 @@ include 'php_action/get_profile.php';
                             </div>
 
                             <!-- Modal -->
-                            <div id="editModal"
-                                class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 flex items-center justify-center">
-                                <div class="bg-white rounded-lg p-6 w-96 shadow-lg">
-                                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h3>
+                            <div id="editModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 w-96 shadow-lg">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h3>
 
-                                    <form id="editProfileForm" action="php_action/update_profile.php" method="POST">
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Name:</label>
-                                            <input type="text" id="editName" class="w-full border rounded px-3 py-2">
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Age:</label>
-                                            <input type="number" id="editAge" class="w-full border rounded px-3 py-2">
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Height (cm):</label>
-                                            <input type="number" id="editHeight"
-                                                class="w-full border rounded px-3 py-2">
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Weight (kg):</label>
-                                            <input type="number" id="editWeight"
-                                                class="w-full border rounded px-3 py-2">
-                                        </div>
+        <form action="php_action/update_profile.php" method="POST">
+            <!-- Hidden Input for User ID -->
+            <input type="hidden" name="user_id" value="<?= $_SESSION['user_id'] ?>">
 
-                                        <div class="flex justify-end mt-4">
-                                            <button type="button" onclick="closeModal()"
-                                                class="mr-2 px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                            <button type="submit"
-                                                class="px-4 py-2 bg-blue-500 text-white rounded">Save</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
+            <div class="mb-3">
+                <label class="block text-gray-700">Name:</label>
+                <input type="text" name="name" class="w-full border rounded px-3 py-2" required>
+            </div>
+            <div class="mb-3">
+                <label class="block text-gray-700">Age:</label>
+                <input type="number" name="age" class="w-full border rounded px-3 py-2" required>
+            </div>
+            <div class="mb-3">
+                <label class="block text-gray-700">Height (cm):</label>
+                <input type="number" name="height" class="w-full border rounded px-3 py-2" required>
+            </div>
+            <div class="mb-3">
+                <label class="block text-gray-700">Weight (kg):</label>
+                <input type="number" name="weight" class="w-full border rounded px-3 py-2" required>
+            </div>
+
+            <div class="flex justify-end mt-4">
+                <button type="button" onclick="closeModal()" class="mr-2 px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 
 
@@ -246,6 +248,7 @@ include 'php_action/get_profile.php';
                                     <!-- Display Daily Goal -->
                                     <?php
 
+
 if ($goal) {
     echo '<div class="w-full rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow-md transition p-4">';
     echo '<h5 class="text-md font-semibold text-gray-900">Daily Calorie Goal</h5>';
@@ -261,8 +264,6 @@ if ($goal) {
     echo '<h5 class="text-md font-semibold text-gray-900">Daily Carbs Goal</h5>';
     echo '<p class="text-sm text-gray-700">Target: ' . htmlspecialchars($goal['carbs']) . ' g</p>';
     echo '</div>';
-
-    echo '<p class="text-gray-500 text-sm">Set on: ' . htmlspecialchars($goal['date_set']) . '</p>';
 
     // Calculate Weekly Goals (Daily Goal × 7)
     $weekly_calories = $goal['calories'] * 7;
