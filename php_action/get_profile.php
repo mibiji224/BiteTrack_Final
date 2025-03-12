@@ -7,7 +7,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $userid = $_SESSION['user_id'];
 
-$sql = "SELECT first_name, age, height, weight FROM users WHERE user_id = ?";
+$sql = "SELECT first_name,last_name, age, height, weight FROM users WHERE user_id = ?";
 $stmt = $connect->prepare($sql);
 $stmt->bind_param("i", $userid);
 $stmt->execute();
@@ -17,7 +17,8 @@ if ($result->num_rows > 0) {
     $user = $result->fetch_assoc();
 } else {
     $user = [
-        'name' => 'N/A',
+        'first_name' => 'N/A',
+        'last_name' => 'N/A',
         'age' => 'N/A',
         'height' => 'N/A',
         'weight' => 'N/A'

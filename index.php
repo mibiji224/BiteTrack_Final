@@ -20,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($_POST['password'] == "") $errors[] = "Password is required"; // Check the raw input
     } else {
         // Query the database for the user
-        $sql = "SELECT user_id FROM users WHERE username = ? AND password = ?";
+        $sql = "SELECT user_id FROM users WHERE user_name = ? AND password = ?";
         $stmt = $connect->prepare($sql);
         $stmt->bind_param("ss", $username, $password);
         $stmt->execute();
