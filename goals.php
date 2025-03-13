@@ -19,25 +19,25 @@ include 'php_action/get_profile.php';
     <link rel="stylesheet" href="custom/css/custom.css">
     <link rel="stylesheet" href="css/button.css">
     <link rel="stylesheet" href="css/sidebar.css">
+    <!-- Bootstrap File Input CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-fileinput/5.5.2/css/fileinput.min.css" rel="stylesheet">
+    <!-- Bootstrap File Input JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-fileinput/5.5.2/js/fileinput.min.js"></script>
 
     <style>
         /* Custom styles for avatar enhancement */
         .avatar-enhanced {
             border: 2px solid #e5e7eb;
-            /* Light gray border */
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            /* Subtle shadow */
             transition: transform 0.2s ease-in-out;
         }
 
         .avatar-enhanced:hover {
             transform: scale(1.05);
-            /* Slight zoom on hover */
         }
 
         .avatar-loading {
             background: #f3f4f6;
-            /* Light gray background while loading */
             animation: pulse 1.5s infinite;
         }
 
@@ -57,135 +57,13 @@ include 'php_action/get_profile.php';
 
         .avatar-error {
             background: #fee2e2;
-            /* Light red background for error */
             display: flex;
             align-items: center;
             justify-content: center;
             color: #dc2626;
-            /* Red text */
             font-size: 12px;
         }
     </style>
-
-    <script>
-        function toggleModal(show) {
-            const modal = document.getElementById("goalModal");
-            modal.classList.toggle("hidden", !show);
-        }
-
-        // Open Modal
-        function openModal() {
-            document.getElementById("editModal").classList.remove("hidden");
-
-            // Prefill the form with current values
-            document.getElementById("editFirstName").value = document.getElementById("firstNameDisplay").textContent;
-            document.getElementById("editLastName").value = document.getElementById("lastNameDisplay").textContent;
-            document.getElementById("editAge").value = document.getElementById("ageDisplay").textContent;
-            document.getElementById("editHeight").value = document.getElementById("heightDisplay").textContent.replace(" cm", "");
-            document.getElementById("editWeight").value = document.getElementById("weightDisplay").textContent.replace(" kg", "");
-            // Prefill avatar if available
-            const avatarPath = "<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/default.png'); ?>";
-            const profileAvatar = document.getElementById("profileAvatar");
-            const editAvatarPreview = document.getElementById("editAvatarPreview");
-            setImageLoading(profileAvatar);
-            setImageLoading(editAvatarPreview);
-            profileAvatar.onload = () => removeImageLoading(profileAvatar);
-            profileAvatar.onerror = () => setImageError(profileAvatar);
-            editAvatarPreview.onload = () => removeImageLoading(editAvatarPreview);
-            editAvatarPreview.onerror = () => setImageError(editAvatarPreview);
-            profileAvatar.src = avatarPath;
-            editAvatarPreview.src = avatarPath;
-        }
-
-        // Close Modal
-        function closeModal() {
-            document.getElementById("editModal").classList.add("hidden");
-        }
-
-        // Handle Form Submission
-        document.getElementById("editProfileForm").addEventListener("submit", function(event) {
-            event.preventDefault();
-
-            const formData = new FormData(this);
-            formData.append("user_id", <?= $_SESSION['user_id'] ?>);
-
-            // AJAX Request to PHP
-            fetch("php_action/update_profile.php", {
-                    method: "POST",
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Update the table with new values
-                        document.getElementById("firstNameDisplay").textContent = data.updatedData.first_name || document.getElementById("editFirstName").value;
-                        document.getElementById("lastNameDisplay").textContent = data.updatedData.last_name || document.getElementById("editLastName").value;
-                        document.getElementById("ageDisplay").textContent = data.updatedData.age || document.getElementById("editAge").value;
-                        document.getElementById("heightDisplay").textContent = (data.updatedData.height || document.getElementById("editHeight").value) + " cm";
-                        document.getElementById("weightDisplay").textContent = (data.updatedData.weight || document.getElementById("editWeight").value) + " kg";
-                        // Update avatars
-                        const profileAvatar = document.getElementById("profileAvatar");
-                        const editAvatarPreview = document.getElementById("editAvatarPreview");
-                        const newAvatarPath = data.updatedData.profile_avatar || "<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>";
-                        profileAvatar.src = newAvatarPath;
-                        editAvatarPreview.src = newAvatarPath;
-                        setImageLoading(profileAvatar);
-                        setImageLoading(editAvatarPreview);
-                        profileAvatar.onload = () => removeImageLoading(profileAvatar);
-                        profileAvatar.onerror = () => setImageError(profileAvatar);
-                        editAvatarPreview.onload = () => removeImageLoading(editAvatarPreview);
-                        editAvatarPreview.onerror = () => setImageError(editAvatarPreview);
-                        profileAvatar.src = newAvatarPath;
-                        editAvatarPreview.src = newAvatarPath;
-                        closeModal();
-                    } else {
-                        alert("Error updating profile: " + data.error);
-                    }
-                })
-                .catch(error => console.error("Error:", error));
-        });
-
-        // Preview avatar on selection
-        document.getElementById("editAvatar").addEventListener("change", function(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                const profileAvatar = document.getElementById("profileAvatar");
-                const editAvatarPreview = document.getElementById("editAvatarPreview");
-                setImageLoading(profileAvatar);
-                setImageLoading(editAvatarPreview);
-                reader.onload = function(e) {
-                    profileAvatar.onload = () => removeImageLoading(profileAvatar);
-                    profileAvatar.onerror = () => setImageError(profileAvatar);
-                    editAvatarPreview.onload = () => removeImageLoading(editAvatarPreview);
-                    editAvatarPreview.onerror = () => setImageError(editAvatarPreview);
-                    profileAvatar.src = e.target.result;
-                    editAvatarPreview.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // Helper functions for image loading states
-        function setImageLoading(img) {
-            img.classList.add("avatar-loading");
-            img.classList.remove("avatar-error", "avatar-enhanced");
-            img.style.backgroundImage = "none"; // Clear any background
-        }
-
-        function removeImageLoading(img) {
-            img.classList.remove("avatar-loading");
-            img.classList.add("avatar-enhanced");
-        }
-
-        function setImageError(img) {
-            img.classList.remove("avatar-loading", "avatar-enhanced");
-            img.classList.add("avatar-error");
-            img.src = "<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>"; // Fallback to default
-            img.alt = "Failed to load avatar";
-            img.innerHTML = "Error loading image";
-        }
-    </script>
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -219,7 +97,7 @@ include 'php_action/get_profile.php';
                                         <tr class="hover:bg-gray-100 transition">
                                             <td class="px-6 py-3 w-1/5 font-semibold">Avatar:</td>
                                             <td class="px-6 py-3">
-                                                <img id="profileAvatar" src="<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>" alt="Profile Avatar" class="w-20 h-20 rounded-full object-cover">
+                                                <img id="profileAvatar" src="<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>" alt="Profile Avatar" class="w-20 h-20 rounded-full object-cover avatar-enhanced">
                                             </td>
                                         </tr>
                                         <tr class="hover:bg-gray-100 transition">
@@ -250,42 +128,56 @@ include 'php_action/get_profile.php';
                             <div id="editModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 flex items-center justify-center">
                                 <div class="bg-white rounded-lg p-6 w-96 shadow-lg">
                                     <h3 class="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h3>
-
-                                    <form id="editProfileForm" enctype="multipart/form-data">
-                                        <!-- Hidden Input for User ID -->
-                                        <input type="hidden" name="user_id" value="<?= $_SESSION['user_id'] ?>">
-
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">First Name:</label>
-                                            <input type="text" id="editFirstName" name="first_name" class="w-full border rounded px-3 py-2" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Last Name:</label>
-                                            <input type="text" id="editLastName" name="last_name" class="w-full border rounded px-3 py-2" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Age:</label>
-                                            <input type="number" id="editAge" name="age" class="w-full border rounded px-3 py-2" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Height (cm):</label>
-                                            <input type="number" id="editHeight" name="height" class="w-full border rounded px-3 py-2" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Weight (kg):</label>
-                                            <input type="number" id="editWeight" name="weight" class="w-full border rounded px-3 py-2" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="block text-gray-700">Profile Avatar:</label>
-                                            <input type="file" id="editAvatar" name="profile_avatar" accept="image/*" class="w-full border rounded px-3 py-2">
-                                            <img id="editAvatarPreview" src="<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>" alt="Avatar Preview" class="mt-2 w-20 h-20 rounded-full object-cover">
-                                        </div>
-
+                                    <div id="edit-profile-messages" class="mb-4"></div>
+                                    <div id="edit-profile-content" class="div-result">
+                                        <!-- Profile Details Form -->
+                                        <form id="editProfileForm" action="php_action/update_profile_details.php" method="POST">
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">First Name:</label>
+                                                <input type="text" id="editFirstName" name="first_name" class="w-full border rounded px-3 py-2" required>
+                                            </div>
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Last Name:</label>
+                                                <input type="text" id="editLastName" name="last_name" class="w-full border rounded px-3 py-2" required>
+                                            </div>
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Age:</label>
+                                                <input type="number" id="editAge" name="age" class="w-full border rounded px-3 py-2" required>
+                                            </div>
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Height (cm):</label>
+                                                <input type="number" id="editHeight" name="height" class="w-full border rounded px-3 py-2" required>
+                                            </div>
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Weight (kg):</label>
+                                                <input type="number" id="editWeight" name="weight" class="w-full border rounded px-3 py-2" required>
+                                            </div>
+                                            <div class="flex justify-end mt-4">
+                                                <button type="button" onclick="closeModal()" class="mr-2 px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                                <button type="submit" id="editProfileBtn" class="px-4 py-2 bg-blue-500 text-white rounded">Save</button>
+                                            </div>
+                                        </form>
+                                        <!-- Avatar Update Form -->
+                                        <form id="updateProfileImageForm" action="php_action/update_avatar.php" method="POST" enctype="multipart/form-data" class="mt-4">
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Profile Avatar:</label>
+                                                <div class="center-block">
+                                                    <input id="editAvatar" name="profile_avatar" type="file" class="file-input">
+                                                </div>
+                                                <div id="kv-avatar-errors-1" class="mt-2"></div>
+                                            </div>
+                                            <div class="mb-3 form-group">
+                                                <label class="block text-gray-700">Avatar Preview:</label>
+                                                <img id="editAvatarPreview" src="<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>" alt="Avatar Preview" class="mt-2 w-20 h-20 rounded-full object-cover avatar-enhanced">
+                                            </div>
+                                            <div class="flex justify-end mt-4">
+                                                <button type="submit" id="editAvatarBtn" class="px-4 py-2 bg-green-500 text-white rounded">Update Avatar</button>
+                                            </div>
+                                        </form>
                                         <div class="flex justify-end mt-4">
-                                            <button type="button" onclick="closeModal()" class="mr-2 px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                            <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Save</button>
-                                        </div>
-                                    </form>
+                                                <button type="button" id="doneEdit" onclick="closeModal()" class="px-4 py-2 bg-blue-500 text-white rounded">Done</button>
+                                            </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -572,23 +464,300 @@ include 'php_action/get_profile.php';
                                 </script>
                             </div>
                         </div>
+                    </div>
                 </main>
             </div>
         </div>
-        </div>
     </main>
-</body>
 
-<script defer src="bundle.js"></script>
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"91b7c147fdd902a9","version":"2025.1.0","r":1,"token":"67f7a278e3374824ae6dd92295d38f77","serverTiming":{"name":{"cfExtPri":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}}}' crossorigin="anonymous"></script>
+    <script defer src="bundle.js"></script>
+    <script>
+        function toggleModal(show) {
+            const modal = document.getElementById("goalModal");
+            if (modal) {
+                modal.classList.toggle("hidden", !show);
+            } else {
+                console.error("Goal modal not found");
+            }
+        }
 
-<svg id="SvgjsSvg1001" width="2" height="0" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svgjs="http://svgjs.dev" style="overflow: hidden; top: -100%; left: -100%; position: absolute; opacity: 0;">
-    <defs id="SvgjsDefs1002"></defs>
-    <polyline id="SvgjsPolyline1003" points="0,0"></polyline>
-    <path id="SvgjsPath1004" d="M0 0 "></path>
-</svg>
+        function openModal() {
+            const modal = document.getElementById("editModal");
+            if (modal) {
+                modal.classList.remove("hidden");
 
-<div class="jvm-tooltip"></div>
+                // Prefill the form with current values
+                $("#editFirstName").val($("#firstNameDisplay").text());
+                $("#editLastName").val($("#lastNameDisplay").text());
+                $("#editAge").val($("#ageDisplay").text());
+                $("#editHeight").val($("#heightDisplay").text().replace(" cm", ""));
+                $("#editWeight").val($("#weightDisplay").text().replace(" kg", ""));
+
+                const avatarPath = $("#profileAvatar").attr('src');
+                const editAvatarPreview = $("#editAvatarPreview");
+                setImageLoading(editAvatarPreview);
+                editAvatarPreview.onload = () => removeImageLoading(editAvatarPreview);
+                editAvatarPreview.onerror = () => setImageError(editAvatarPreview);
+                editAvatarPreview.attr('src', avatarPath);
+
+                // Initialize fileinput plugin
+                $("#editAvatar").fileinput({
+                    overwriteInitial: true,
+                    maxFileSize: 2500,
+                    showClose: false,
+                    showCaption: false,
+                    browseLabel: '',
+                    removeLabel: '',
+                    browseIcon: '<i class="glyphicon glyphicon-folder-open"></i>',
+                    removeIcon: '<i class="glyphicon glyphicon-remove"></i>',
+                    removeTitle: 'Cancel or reset changes',
+                    elErrorContainer: '#kv-avatar-errors-1',
+                    msgErrorClass: 'alert alert-block alert-danger',
+                    defaultPreviewContent: '<img src="' + avatarPath + '" alt="Profile Image" style="width:100%;">',
+                    layoutTemplates: {
+                        main2: '{preview} {remove} {browse}'
+                    },
+                    allowedFileExtensions: ["jpg", "png", "gif", "JPG", "PNG", "GIF"]
+                });
+
+                // Update preview when a new file is selected
+                $("#editAvatar").on('fileloaded', function(event, file, previewId, index, reader) {
+                    $("#editAvatarPreview").attr('src', reader.result);
+                });
+
+                // Reset preview if file is cleared
+                $("#editAvatar").on('filecleared', function(event) {
+                    $("#editAvatarPreview").attr('src', avatarPath);
+                });
+            } else {
+                console.error("Edit modal not found");
+            }
+        }
+
+        function closeModal() {
+            const modal = document.getElementById("editModal");
+            if (modal) {
+                modal.classList.add("hidden");
+                $(".text-danger").remove();
+                $(".form-group").removeClass('has-error').removeClass('has-success');
+                $('#edit-profile-messages').empty();
+                // Reload the page after modal is dismissed
+                window.location.reload();
+            } else {
+                console.error("Cannot close modal: editModal not found");
+            }
+        }
+
+        // Handle profile details form submission
+        $("#editProfileForm").unbind('submit').bind('submit', function(event) {
+            event.preventDefault();
+
+            var firstName = $("#editFirstName").val();
+            var lastName = $("#editLastName").val();
+            var age = $("#editAge").val();
+            var height = $("#editHeight").val();
+            var weight = $("#editWeight").val();
+
+            if (firstName == "") {
+                $("#editFirstName").after('<p class="text-danger">First Name field is required</p>');
+                $('#editFirstName').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editFirstName").find('.text-danger').remove();
+                $("#editFirstName").closest('.form-group').addClass('has-success');
+            }
+
+            if (lastName == "") {
+                $("#editLastName").after('<p class="text-danger">Last Name field is required</p>');
+                $('#editLastName').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editLastName").find('.text-danger').remove();
+                $("#editLastName").closest('.form-group').addClass('has-success');
+            }
+
+            if (age == "") {
+                $("#editAge").after('<p class="text-danger">Age field is required</p>');
+                $('#editAge').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editAge").find('.text-danger').remove();
+                $("#editAge").closest('.form-group').addClass('has-success');
+            }
+
+            if (height == "") {
+                $("#editHeight").after('<p class="text-danger">Height field is required</p>');
+                $('#editHeight').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editHeight").find('.text-danger').remove();
+                $("#editHeight").closest('.form-group').addClass('has-success');
+            }
+
+            if (weight == "") {
+                $("#editWeight").after('<p class="text-danger">Weight field is required</p>');
+                $('#editWeight').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editWeight").find('.text-danger').remove();
+                $("#editWeight").closest('.form-group').addClass('has-success');
+            }
+
+            if (firstName && lastName && age && height && weight) {
+                $("#editProfileBtn").prop('disabled', true).text('Saving...');
+
+                var formData = new FormData(this);
+                for (var pair of formData.entries()) {
+                    console.log(pair[0] + ': ' + pair[1]);
+                }
+
+                $.ajax({
+                    url: window.location.pathname.replace(/[^/]*$/, '') + 'php_action/update_profile_details.php',
+                    type: 'POST',
+                    data: formData,
+                    dataType: 'json',
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        console.log("Profile Update Response:", response);
+                        $("#editProfileBtn").prop('disabled', false).text('Save');
+                        if (response.success) {
+                            $("#firstNameDisplay").text(response.updatedData.first_name || firstName);
+                            $("#lastNameDisplay").text(response.updatedData.last_name || lastName);
+                            $("#ageDisplay").text(response.updatedData.age || age);
+                            $("#heightDisplay").text((response.updatedData.height || height) + " cm");
+                            $("#weightDisplay").text((response.updatedData.weight || weight) + " kg");
+                            $('#edit-profile-messages').html('<div class="alert alert-success">' +
+                                '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                                '<strong><i class="fas fa-check-circle"></i></strong> ' + response.messages +
+                                '</div>');
+                            $(".alert-success").delay(500).show(10, function() {
+                                $(this).delay(3000).hide(10, function() {
+                                    closeModal(); // This will trigger the reload
+                                });
+                            });
+                        } else {
+                            $('#edit-profile-messages').html('<div class="alert alert-danger">' +
+                                '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                                '<strong><i class="fas fa-exclamation-circle"></i></strong> ' + response.messages +
+                                '</div>');
+                        }
+                        $(".text-danger").remove();
+                        $(".form-group").removeClass('has-error').removeClass('has-success');
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("AJAX Error:", xhr.status, xhr.statusText, xhr.responseText);
+                        $("#editProfileBtn").prop('disabled', false).text('Save');
+                        $('#edit-profile-messages').html('<div class="alert alert-danger">' +
+                            '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                            '<strong><i class="fas fa-exclamation-circle"></i></strong> Error: ' + xhr.statusText +
+                            '</div>');
+                    }
+                });
+            }
+            return false;
+        });
+
+        // Handle avatar update form submission
+        $("#updateProfileImageForm").unbind('submit').bind('submit', function(event) {
+            event.preventDefault();
+
+            var avatar = $("#editAvatar").val();
+            if (avatar == "") {
+                $("#editAvatar").closest('.center-block').after('<p class="text-danger">Profile Avatar field is required</p>');
+                $('#editAvatar').closest('.form-group').addClass('has-error');
+            } else {
+                $("#editAvatar").find('.text-danger').remove();
+                $("#editAvatar").closest('.form-group').addClass('has-success');
+            }
+
+            if (avatar) {
+                $("#editAvatarBtn").prop('disabled', true).text('Updating...');
+
+                var formData = new FormData(this);
+                $.ajax({
+                    url: window.location.pathname.replace(/[^/]*$/, '') + 'php_action/update_avatar.php',
+                    type: 'POST',
+                    data: formData,
+                    dataType: 'json',
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        console.log("Avatar Update Response:", response);
+                        $("#editAvatarBtn").prop('disabled', false).text('Update Avatar');
+                        if (response.success) {
+                            const newAvatarPath = response.updatedData.profile_avatar || $("#profileAvatar").attr('src');
+                            const profileAvatar = $("#profileAvatar");
+                            const editAvatarPreview = $("#editAvatarPreview");
+                            setImageLoading(profileAvatar);
+                            setImageLoading(editAvatarPreview);
+                            profileAvatar.onload = () => removeImageLoading(profileAvatar);
+                            profileAvatar.onerror = () => setImageError(profileAvatar);
+                            editAvatarPreview.onload = () => removeImageLoading(editAvatarPreview);
+                            editAvatarPreview.onerror = () => setImageError(editAvatarPreview);
+                            profileAvatar.attr('src', newAvatarPath);
+                            editAvatarPreview.attr('src', newAvatarPath);
+                            $('#edit-profile-messages').html('<div class="alert alert-success">' +
+                                '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                                '<strong><i class="fas fa-check-circle"></i></strong> ' + response.messages +
+                                '</div>');
+                            $(".alert-success").delay(500).show(10, function() {
+                                $(this).delay(3000).hide(10, function() {
+                                    closeModal(); // This will trigger the reload
+                                });
+                            });
+                        } else {
+                            $('#edit-profile-messages').html('<div class="alert alert-danger">' +
+                                '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                                '<strong><i class="fas fa-exclamation-circle"></i></strong> ' + response.messages +
+                                '</div>');
+                        }
+                        $(".fileinput-remove-button").click();
+                        $(".text-danger").remove();
+                        $(".form-group").removeClass('has-error').removeClass('has-success');
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("AJAX Error:", xhr.status, xhr.statusText, xhr.responseText);
+                        $("#editAvatarBtn").prop('disabled', false).text('Update Avatar');
+                        $('#edit-profile-messages').html('<div class="alert alert-danger">' +
+                            '<button type="button" class="close" data-dismiss="alert">×</button>' +
+                            '<strong><i class="fas fa-exclamation-circle"></i></strong> Error: ' + xhr.statusText +
+                            '</div>');
+                    }
+                });
+            }
+            return false;
+        });
+
+        // Helper functions for image loading states
+        function setImageLoading(img) {
+            if (img && img.length) {
+                img.classList.add("avatar-loading");
+                img.classList.remove("avatar-error", "avatar-enhanced");
+                img.style.backgroundImage = "none";
+            } else {
+                console.error("Image element not found for loading state");
+            }
+        }
+
+        function removeImageLoading(img) {
+            if (img && img.length) {
+                img.classList.remove("avatar-loading");
+                img.classList.add("avatar-enhanced");
+            } else {
+                console.error("Image element not found for removing loading state");
+            }
+        }
+
+        function setImageError(img) {
+            if (img && img.length) {
+                img.classList.remove("avatar-loading", "avatar-enhanced");
+                img.classList.add("avatar-error");
+                img.src = "<?php echo htmlspecialchars($user['profile_avatar'] ?? 'photos/user.png'); ?>";
+                img.alt = "Failed to load avatar";
+                img.innerHTML = "Error loading image";
+            } else {
+                console.error("Image element not found for error state");
+            }
+        }
+    </script>
 </body>
 
 </html>

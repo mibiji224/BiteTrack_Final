@@ -2,9 +2,6 @@
 session_start();
 require_once 'php_action/db_connect.php';
 
-
-$user_id = $_SESSION['user_id'];
-
 $user_id = $_SESSION['user_id'];
 
 $sql_user = "SELECT user_name, profile_avatar FROM users WHERE user_id = '$user_id'";
@@ -13,11 +10,11 @@ $user = $result_user->fetch_assoc();
 $user_name = $user['user_name'] ?? 'Unknown';
 $user_avatar = $user['profile_avatar'] ?? 'photos/user.png';
 
-
 // Handle new post submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['content'])) {
     $content = $connect->real_escape_string(trim($_POST['content']));
-    $avatar = 'photos/user.png'; // Default avatar or fetch from user table if available
+    // Use the user's actual avatar instead of a hardcoded value
+    $avatar = $user_avatar; // Fetch the logged-in user's avatar
     if (!empty($content)) {
         $sql = "INSERT INTO posts (user_name, user_avatar, post_content, post_time) VALUES ('$user_name', '$avatar', '$content', NOW())";
         $connect->query($sql);
@@ -43,7 +40,6 @@ while ($row = $result->fetch_assoc()) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BiteTrack - Your Community!</title>
 
-
     <!-- Stylesheets -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -54,7 +50,6 @@ while ($row = $result->fetch_assoc()) {
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-
 </head>
 
 <body class="flex flex-col min-h-screen">
@@ -70,9 +65,8 @@ while ($row = $result->fetch_assoc()) {
                 <main class="p-6 mx-auto max-w-full min-h-screen">
                     <!-- Main Grid Layout -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-full w-screen max-w-full flex-1">
-                        <div class="col-span-2 w-full bg-white rounded-2xl flex flex-col h-full min-h-[80vh] shadow-lg ">
+                        <div class="col-span-2 w-full bg-white rounded-2xl flex flex-col h-full min-h-[80vh] shadow-lg">
                             <div class="col-span-12">
-
                                 <!-- Header -->
                                 <div class="bg-gradient-to-r from-[#FCD404] to-[#FB6F74] text-white text-lg font-semibold py-1 px-6 rounded-t-2xl">
                                     News Feed ✨
@@ -81,7 +75,7 @@ while ($row = $result->fetch_assoc()) {
                                 <!-- Add New Post -->
                                 <div class="p-4 border-b border-gray-300 bg-gray-50">
                                     <form method="POST" class="flex space-x-3">
-                                        <img src="photos/user.png" alt="User Icon" class="w-12 h-12 rounded-full border border-gray-300">
+                                        <img src="<?php echo htmlspecialchars($user_avatar); ?>" alt="User Icon" class="w-12 h-12 rounded-full border border-gray-300">
                                         <input id="post-content" name="content" type="text" placeholder="What's on your mind?"
                                             class="flex-1 px-4 py-2 border border-gray-300 rounded-full outline-none text-gray-700">
                                         <button type="submit" id="post-button"
@@ -96,7 +90,7 @@ while ($row = $result->fetch_assoc()) {
                                     <?php foreach ($posts as $post): ?>
                                         <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                                             <div class="flex items-center space-x-3">
-                                                <img src="photos/user.png" alt="User Icon" class="w-10 h-10 rounded-full">
+                                                <img src="<?php echo htmlspecialchars($post['user_avatar']); ?>" alt="User Icon" class="w-10 h-10 rounded-full">
                                                 <div>
                                                     <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($post['user_name']); ?></p>
                                                     <p class="text-sm text-gray-500"><?php echo $post['post_time']; ?></p>
@@ -107,12 +101,7 @@ while ($row = $result->fetch_assoc()) {
                                     <?php endforeach; ?>
                                 </div>
                             </div>
-
-
-
-
                         </div>
-
                     </div>
                 </main>
             </div>
@@ -120,9 +109,7 @@ while ($row = $result->fetch_assoc()) {
     </main>
     <!-- Main Content End -->
     <!-- MAIN CONTENT START -->
-    <div>
-
-    </div>
+    <div></div>
 
     <!-- Scripts -->
     <script defer src="bundle.js"></script>
@@ -181,7 +168,7 @@ while ($row = $result->fetch_assoc()) {
         }
 
         // Handle form submission
-        document.getElementById('post-form').addEventListener('submit', async (e) => {
+        document.getElementById('post-form')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             const content = document.getElementById('post-content').value.trim();
             if (content) {
