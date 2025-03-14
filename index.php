@@ -5,7 +5,7 @@ session_start();
 
 // Redirect if the user is already logged in
 if (isset($_SESSION['user_id'])) {
-    header('Location: http://localhost:3000/dashboard.php');
+    header('Location:/dashboard.php');
     exit();
 }
 
@@ -33,7 +33,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Debugging (optional)
             echo "Session user_id set: " . $_SESSION['user_id'];
 
-            header('Location: http://localhost:3000/dashboard.php');
+            header('Location: /dashboard.php');
             exit();
         } else {
             $errors[] = "Incorrect username/password combination";

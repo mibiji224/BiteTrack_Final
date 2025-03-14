@@ -1,12 +1,7 @@
 <?php session_start();
-$host = "localhost";
-$username = "root";
-$password = "";
-$database = "nutrition_tracker";
+include 'php_action/db_connect.php';
 
-$conn = new mysqli($host, $username, $password, $database);
-
-if ($conn->connect_error) {
+if ($connect->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
@@ -22,13 +17,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $protein = $_POST['protein'];
     $carbs = $_POST['carbs'];
 
-    $stmt = $conn->prepare("INSERT INTO meals (user_id, meal_name, calories, protein, carbs) VALUES (?, ?, ?, ?, ?)");
+    $stmt = $connect->prepare("INSERT INTO meals (user_id, meal_name, calories, protein, carbs) VALUES (?, ?, ?, ?, ?)");
     $stmt->bind_param("isddd", $user_id, $meal_name, $calories, $protein, $carbs);
 
     if ($stmt->execute()) {
         echo json_encode(["success" => true]);
     } else {
-        echo json_encode(["error" => "Error adding meal: " . $conn->error]);
+        echo json_encode(["error" => "Error adding meal: " . $connect->error]);
     }
 
     $stmt->close();
@@ -45,13 +40,13 @@ if ($period === 'week') {
     // Fetch weekly intake (from Monday to today)
     $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs
                          FROM meals WHERE user_id = ? AND DATE(date_added) >= ?";
-    $stmt = $conn->prepare($totalIntakeQuery);
+    $stmt = $connect->prepare($totalIntakeQuery);
     $stmt->bind_param("is", $user_id, $startOfWeek);
 } else {
     // Fetch today's intake
     $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs
                          FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
-    $stmt = $conn->prepare($totalIntakeQuery);
+    $stmt = $connect->prepare($totalIntakeQuery);
     $stmt->bind_param("i", $user_id);
 }
 
@@ -70,11 +65,11 @@ $offset = ($page - 1) * $limit;
 // Get Total Meals Count for selected period
 if ($period === 'week') {
     $totalMealsQuery = "SELECT COUNT(*) as total FROM meals WHERE user_id = ? AND DATE(date_added) >= ?";
-    $stmt = $conn->prepare($totalMealsQuery);
+    $stmt = $connect->prepare($totalMealsQuery);
     $stmt->bind_param("is", $user_id, $startOfWeek);
 } else {
     $totalMealsQuery = "SELECT COUNT(*) as total FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
-    $stmt = $conn->prepare($totalMealsQuery);
+    $stmt = $connect->prepare($totalMealsQuery);
     $stmt->bind_param("i", $user_id);
 }
 
@@ -88,11 +83,11 @@ $stmt->close();
 $meals = [];
 if ($period === 'week') {
     $sql = "SELECT meal_name, calories, protein, carbs, date_added FROM meals WHERE user_id = ? AND DATE(date_added) >= ? ORDER BY date_added DESC LIMIT ? OFFSET ?";
-    $stmt = $conn->prepare($sql);
+    $stmt = $connect->prepare($sql);
     $stmt->bind_param("isii", $user_id, $startOfWeek, $limit, $offset);
 } else {
     $sql = "SELECT meal_name, calories, protein, carbs, date_added FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE() ORDER BY date_added DESC LIMIT ? OFFSET ?";
-    $stmt = $conn->prepare($sql);
+    $stmt = $connect->prepare($sql);
     $stmt->bind_param("iii", $user_id, $limit, $offset);
 }
 
@@ -102,7 +97,7 @@ while ($row = $result->fetch_assoc()) {
     $meals[] = $row;
 }
 $stmt->close();
-$conn->close();
+$connect->close();
 ?>
 
 <!DOCTYPE html>

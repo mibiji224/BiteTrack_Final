@@ -1,9 +1,9 @@
 <?php 	
 
-$localhost = "127.0.0.1";
-$username = "root";
-$password = "";
-$dbname = "nutrition_tracker";
+$localhost = "sql105.infinityfree.com";
+$username = "sql105.infinityfree.com";
+$password = "Zaizen7891";
+$dbname = "if0_38488649_nutrition_tracker";
 
 // db connection
 $connect = new mysqli($localhost, $username, $password, $dbname);

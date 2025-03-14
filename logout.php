@@ -8,6 +8,6 @@ session_unset();
 // destroy the session 
 session_destroy(); 
 
-header('location: http://localhost:3000/index.php');
+header('location: /index.php');
 
 ?>

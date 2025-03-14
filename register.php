@@ -35,7 +35,7 @@ if ($_POST) {
     } elseif ($password !== $confirmPassword) {
         $errors[] = "Passwords do not match";
     } else {
-        $sql = "SELECT * FROM users WHERE username = ?";
+        $sql = "SELECT * FROM users WHERE user_name = ?";
         $stmt = $connect->prepare($sql);
         $stmt->bind_param("s", $username);
         $stmt->execute();
@@ -43,13 +43,13 @@ if ($_POST) {
 
         if ($result->num_rows == 0) {
             $hashedPassword = md5($password);
-            $insertSql = "INSERT INTO users ( username, password, email, first_name, last_name) VALUES (?, ?, ?, ?, ?)";
+            $insertSql = "INSERT INTO users ( user_name, password, email, first_name, last_name) VALUES (?, ?, ?, ?, ?)";
             $stmt = $connect->prepare($insertSql);
             $stmt->bind_param("sssss",  $username, $hashedPassword, $email, $firstName, $lastName);
 
             if ($stmt->execute()) {
                 $_SESSION['userId'] = $stmt->insert_id;
-                header('location: http://localhost:3000/dashboard.php');
+                header('Location: /index.php');
                 exit();
             } else {
                 $errors[] = "Failed to register. Please try again.";
