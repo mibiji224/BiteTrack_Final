@@ -5,7 +5,7 @@ session_start();
 
 // Redirect if the user is already logged in
 if (isset($_SESSION['user_id'])) {
-    header('Location:/dashboard.php');
+    header('Location: http://nutritracker.fwh.is/dashboard.php');
     exit();
 }
 
