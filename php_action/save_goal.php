@@ -1,16 +1,12 @@
 <?php
-session_start();
-$host = "localhost";
-$user = "root"; // Change if necessary
-$password = ""; // Change if necessary
-$database = "nutrition_tracker";
-$errorMessage = ""; 
 
-$conn = new mysqli($host, $user, $password, $database);
+include 'db_connect.php';
+session_start();
+
 
 // Check for connection errors
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+if ($connect->connect_error) {
+    die("Connection failed: " . $connect->connect_error);
 }
 
 // Check if the user is logged in
@@ -27,7 +23,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     // Check if the logged-in user already has a goal set
     $check_sql = "SELECT id FROM daily_goals WHERE user_id = ? LIMIT 1";
-    $stmt_check = $conn->prepare($check_sql);
+    $stmt_check = $connect->prepare($check_sql);
     $stmt_check->bind_param("i", $user_id);
     $stmt_check->execute();
     $check_result = $stmt_check->get_result();
@@ -40,7 +36,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $sql = "INSERT INTO daily_goals (user_id, calories, protein, carbs, date_set) VALUES (?, ?, ?, ?, NOW())";
     }
 
-    $stmt = $conn->prepare($sql);
+    $stmt = $connect->prepare($sql);
 
     if ($check_result->num_rows > 0) {
         // Update query
@@ -52,7 +48,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     // Execute and redirect
     if ($stmt->execute()) {
-        header('Location: http://localhost:3000/goals.php');
+        header('Location: /goals.php');
         exit;
     } else {
         echo "Error: " . $stmt->error;
@@ -63,5 +59,5 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 // Close connection
-$conn->close();
+$connect->close();
 ?>
