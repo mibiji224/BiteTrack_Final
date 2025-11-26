@@ -1,27 +1,34 @@
 <?php
-include 'db_connect.php';
+require_once 'db_connect.php';
 session_start();
 
-// Ensure user is logged in
+// Check if user is logged in (Optional for public feeds, but good for security)
 if (!isset($_SESSION['user_id'])) {
-    die(json_encode(['error' => 'Unauthorized access!']));
+    // You can uncomment this if you want to force login to see posts
+    // die(json_encode(['error' => 'Unauthorized access!']));
 }
 
-$user_id = $_SESSION['user_id'];
+// Fetch posts ordered by newest first
+// We select columns explicitly to be safe
+$sql = "SELECT post_id, user_name, user_avatar, post_content, post_time 
+        FROM posts 
+        ORDER BY post_time DESC";
 
-// Fetch posts and join with users table to get the latest profile_avatar
-$sql = "SELECT p.*, u.profile_avatar AS user_avatar 
-        FROM posts p 
-        JOIN users u ON p.user_name = u.user_name 
-        ORDER BY p.post_time DESC";
 $result = $connect->query($sql);
 
 $posts = [];
-while ($row = $result->fetch_assoc()) {
-    $posts[] = $row;
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        // Ensure avatar path is valid
+        if (empty($row['user_avatar'])) {
+            $row['user_avatar'] = 'photos/user.png';
+        }
+        $posts[] = $row;
+    }
 }
 
 header('Content-Type: application/json');
 echo json_encode($posts);
+
 $connect->close();
 ?>

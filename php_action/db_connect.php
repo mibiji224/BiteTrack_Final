@@ -2,8 +2,8 @@
 
 $localhost = "127.0.0.1";
 $username = "root";
-$password = "root";
-$dbname = "nutrition_tracker";
+$password = "";
+$dbname = "nutritracker";
 
 // db connection
 $connect = new mysqli($localhost, $username, $password, $dbname);

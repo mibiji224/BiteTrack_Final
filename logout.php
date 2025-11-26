@@ -1,13 +1,22 @@
-<?php 
+<?php
+session_start(); // Start the session so we can access it
 
-require_once 'php_action/core.php';
+// 1. Unset all session values
+$_SESSION = array();
 
-// remove all session variables
-session_unset(); 
+// 2. Delete the session cookie (Crucial for a full logout)
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000,
+        $params["path"], $params["domain"],
+        $params["secure"], $params["httponly"]
+    );
+}
 
-// destroy the session 
-session_destroy(); 
+// 3. Destroy the session
+session_destroy();
 
-header('location: /index.php');
-
+// 4. Redirect to the login page
+header("Location: index.php");
+exit();
 ?>
