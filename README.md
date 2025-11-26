@@ -1,6 +1,5 @@
 # 🍎 BiteTrack - Smart Nutrition Tracker
 
-![BiteTrack Banner](photos/mealbg.jpg) 
 **BiteTrack** is a comprehensive web-based nutrition and fitness tracking application designed to help users monitor their daily caloric intake, track macronutrients, log water consumption, and stay connected with a fitness community.
 
 Built with **PHP** and **MySQL**, it features a modern, responsive interface powered by **Tailwind CSS** and interactive data visualization using **ApexCharts**.
