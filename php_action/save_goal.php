@@ -1,63 +1,56 @@
 <?php
-
-include 'db_connect.php';
+require_once 'db_connect.php';
 session_start();
-
-
-// Check for connection errors
-if ($connect->connect_error) {
-    die("Connection failed: " . $connect->connect_error);
-}
 
 // Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
-    die("User not logged in.");
+    header("Location: ../index.php");
+    exit();
 }
 
 $user_id = $_SESSION['user_id'];
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $calories = $_POST['calories'];
-    $protein = $_POST['protein'];
-    $carbs = $_POST['carbs'];
+    // 1. Get data from form
+    $calories = $_POST['calories'] ?? 2000;
+    $protein = $_POST['protein'] ?? 150;
+    $carbs = $_POST['carbs'] ?? 250;
 
-    // Check if the logged-in user already has a goal set
-    $check_sql = "SELECT id FROM daily_goals WHERE user_id = ? LIMIT 1";
-    $stmt_check = $connect->prepare($check_sql);
-    $stmt_check->bind_param("i", $user_id);
-    $stmt_check->execute();
-    $check_result = $stmt_check->get_result();
+    // 2. Check if a goal row already exists for this user
+    $check_sql = "SELECT goal_id FROM goals WHERE user_id = ?";
+    $stmt = $connect->prepare($check_sql);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $exists = $result->num_rows > 0;
+    $stmt->close();
 
-    if ($check_result->num_rows > 0) {
-        // If a goal exists, update it
-        $sql = "UPDATE daily_goals SET calories = ?, protein = ?, carbs = ?, date_set = NOW() WHERE user_id = ?";
-    } else {
-        // If no goal exists, insert a new one
-        $sql = "INSERT INTO daily_goals (user_id, calories, protein, carbs, date_set) VALUES (?, ?, ?, ?, NOW())";
-    }
-
-    $stmt = $connect->prepare($sql);
-
-    if ($check_result->num_rows > 0) {
-        // Update query
+    // 3. Update or Insert
+    if ($exists) {
+        // UPDATE existing record
+        $sql = "UPDATE goals SET daily_calories = ?, protein_goal = ?, carbs_goal = ? WHERE user_id = ?";
+        $stmt = $connect->prepare($sql);
         $stmt->bind_param("iiii", $calories, $protein, $carbs, $user_id);
     } else {
-        // Insert query
+        // INSERT new record
+        $sql = "INSERT INTO goals (user_id, daily_calories, protein_goal, carbs_goal) VALUES (?, ?, ?, ?)";
+        $stmt = $connect->prepare($sql);
         $stmt->bind_param("iiii", $user_id, $calories, $protein, $carbs);
     }
 
-    // Execute and redirect
     if ($stmt->execute()) {
-        header('Location: /goals.php');
-        exit;
+        // Success: Redirect back to goals page
+        header('Location: ../goals.php?success=goals_updated');
     } else {
-        echo "Error: " . $stmt->error;
+        // Error handling
+        echo "Error updating goals: " . $connect->error;
     }
 
-    // Close statement
     $stmt->close();
+} else {
+    // Redirect if accessed directly without POST
+    header('Location: ../goals.php');
 }
 
-// Close connection
 $connect->close();
 ?>

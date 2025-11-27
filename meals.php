@@ -24,7 +24,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $stmt->bind_param("isddd", $user_id, $meal_name, $calories, $protein, $carbs);
 
     if ($stmt->execute()) {
-        // Redirect to avoid form resubmission on refresh
         header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
         exit();
     } else {
@@ -39,6 +38,30 @@ $startOfWeek = date('Y-m-d', strtotime('monday this week'));
 
 // Default period is today
 $period = isset($_GET['period']) ? $_GET['period'] : 'today';
+
+// 1. FETCH TARGET GOALS
+// We use COALESCE to set default values (2000, 150, 250) if no goal is found in DB
+$goalSql = "SELECT daily_calories, protein_goal, carbs_goal FROM goals WHERE user_id = ? ORDER BY goal_id DESC LIMIT 1";
+$stmt = $connect->prepare($goalSql);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$goalResult = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$dailyGoalCal = $goalResult['daily_calories'] ?? 2000;
+$dailyGoalProt = $goalResult['protein_goal'] ?? 150;
+$dailyGoalCarb = $goalResult['carbs_goal'] ?? 250;
+
+// Adjust goals based on period
+if ($period === 'week') {
+    $targetCal = $dailyGoalCal * 7;
+    $targetProt = $dailyGoalProt * 7;
+    $targetCarb = $dailyGoalCarb * 7;
+} else {
+    $targetCal = $dailyGoalCal;
+    $targetProt = $dailyGoalProt;
+    $targetCarb = $dailyGoalCarb;
+}
 
 if ($period === 'week') {
     // Fetch weekly intake
@@ -61,8 +84,13 @@ $totalProtein = $totalIntakeResult['total_protein'] ?: 0;
 $totalCarbs = $totalIntakeResult['total_carbs'] ?: 0;
 $stmt->close();
 
+// Calculate Percentages for Progress Bars
+$calPercent = ($targetCal > 0) ? min(100, ($totalCalories / $targetCal) * 100) : 0;
+$protPercent = ($targetProt > 0) ? min(100, ($totalProtein / $targetProt) * 100) : 0;
+$carbPercent = ($targetCarb > 0) ? min(100, ($totalCarbs / $targetCarb) * 100) : 0;
+
 // Pagination Setup
-$limit = 10; // Meals per page
+$limit = 10; 
 $page = isset($_GET['page']) && is_numeric($_GET['page']) ? $_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
@@ -132,16 +160,13 @@ $connect->close();
             }
 
             // Button Loading State
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             btn.disabled = true;
 
             try {
-                // NOTE: Keeping your API Key
                 const response = await fetch(`https://api.calorieninjas.com/v1/nutrition?query=${foodInput}`, {
                     method: "GET",
-                    headers: {
-                        'X-Api-Key': 'FmEM2rbCs+c9j0rAbzaJRA==IVZqSzB9NOhvqjAs'
-                    }
+                    headers: { 'X-Api-Key': 'FmEM2rbCs+c9j0rAbzaJRA==IVZqSzB9NOhvqjAs' }
                 });
 
                 const data = await response.json();
@@ -188,13 +213,20 @@ $connect->close();
     </script>
 </head>
 
-<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
+<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen" x-data="{ sidebarToggle: false }">
 
     <div class="flex h-screen overflow-hidden">
         
         <?php include 'includes/sidebar.php'; ?>
 
         <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+            <div class="lg:hidden flex items-center justify-between bg-white p-4 border-b border-gray-200">
+                <span class="font-bold text-xl text-gray-800">Meal Logs</span>
+                <button @click="sidebarToggle = !sidebarToggle" class="text-gray-600 focus:outline-none">
+                    <i class="fas fa-bars text-2xl"></i>
+                </button>
+            </div>
+
             <main class="w-full bg-gray-50 min-h-screen p-6">
                 <div class="mx-auto max-w-7xl">
 
@@ -217,41 +249,64 @@ $connect->close();
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between relative overflow-hidden group">
-                            <div class="z-10">
-                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Calories</p>
-                                <h3 class="text-2xl font-extrabold text-gray-800 mt-1"><?= htmlspecialchars($totalCalories) ?></h3>
-                                <span class="text-xs text-gray-500">kcal consumed</span>
+                        
+                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Calories</p>
+                                    <h3 class="text-xl font-extrabold text-gray-800 mt-1">
+                                        <?= htmlspecialchars($totalCalories) ?> 
+                                        <span class="text-sm font-medium text-gray-400">/ <?= $targetCal ?></span>
+                                    </h3>
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-500 text-lg">
+                                    <i class="fas fa-fire"></i>
+                                </div>
                             </div>
-                            <div class="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-500 text-xl z-10">
-                                <i class="fas fa-fire"></i>
+                            <div class="w-full bg-gray-100 rounded-full h-2.5 mt-2">
+                                <div class="bg-yellow-400 h-2.5 rounded-full transition-all duration-1000" style="width: <?= $calPercent ?>%"></div>
                             </div>
-                            <div class="absolute right-0 top-0 h-full w-1 bg-yellow-400"></div>
+                            <p class="text-xs text-right text-gray-400 mt-1"><?= round($calPercent) ?>%</p>
                         </div>
 
-                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between relative overflow-hidden group">
-                            <div class="z-10">
-                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Protein</p>
-                                <h3 class="text-2xl font-extrabold text-gray-800 mt-1"><?= htmlspecialchars($totalProtein) ?></h3>
-                                <span class="text-xs text-gray-500">grams consumed</span>
+                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Protein</p>
+                                    <h3 class="text-xl font-extrabold text-gray-800 mt-1">
+                                        <?= htmlspecialchars($totalProtein) ?>g 
+                                        <span class="text-sm font-medium text-gray-400">/ <?= $targetProt ?>g</span>
+                                    </h3>
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 text-lg">
+                                    <i class="fas fa-drumstick-bite"></i>
+                                </div>
                             </div>
-                            <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 text-xl z-10">
-                                <i class="fas fa-drumstick-bite"></i>
+                            <div class="w-full bg-gray-100 rounded-full h-2.5 mt-2">
+                                <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" style="width: <?= $protPercent ?>%"></div>
                             </div>
-                            <div class="absolute right-0 top-0 h-full w-1 bg-blue-400"></div>
+                            <p class="text-xs text-right text-gray-400 mt-1"><?= round($protPercent) ?>%</p>
                         </div>
 
-                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between relative overflow-hidden group">
-                            <div class="z-10">
-                                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Carbs</p>
-                                <h3 class="text-2xl font-extrabold text-gray-800 mt-1"><?= htmlspecialchars($totalCarbs) ?></h3>
-                                <span class="text-xs text-gray-500">grams consumed</span>
+                        <div class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Carbs</p>
+                                    <h3 class="text-xl font-extrabold text-gray-800 mt-1">
+                                        <?= htmlspecialchars($totalCarbs) ?>g 
+                                        <span class="text-sm font-medium text-gray-400">/ <?= $targetCarb ?>g</span>
+                                    </h3>
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500 text-lg">
+                                    <i class="fas fa-bread-slice"></i>
+                                </div>
                             </div>
-                            <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-500 text-xl z-10">
-                                <i class="fas fa-bread-slice"></i>
+                            <div class="w-full bg-gray-100 rounded-full h-2.5 mt-2">
+                                <div class="bg-green-500 h-2.5 rounded-full transition-all duration-1000" style="width: <?= $carbPercent ?>%"></div>
                             </div>
-                            <div class="absolute right-0 top-0 h-full w-1 bg-green-400"></div>
+                            <p class="text-xs text-right text-gray-400 mt-1"><?= round($carbPercent) ?>%</p>
                         </div>
+
                     </div>
 
                     <div class="flex flex-col sm:flex-row gap-4 mb-6 justify-between">

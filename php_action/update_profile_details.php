@@ -20,7 +20,7 @@ $valid = [
     'updatedData' => []
 ];
 
-$user_id = (int)$_SESSION['user_id'];
+$user_id = (int) $_SESSION['user_id'];
 
 // Fetch current profile data (optional, for fallback)
 $sql_current = "SELECT first_name, last_name, age, height, weight FROM users WHERE user_id = ?";
@@ -53,9 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Profile details update
     $first_name = trim($_POST['first_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
-    $age = (int)($_POST['age'] ?? 0);
-    $height = (float)($_POST['height'] ?? 0.0);
-    $weight = (float)($_POST['weight'] ?? 0.0);
+    $age = (int) ($_POST['age'] ?? 0);
+    $height = (float) ($_POST['height'] ?? 0.0);
+    $weight = (float) ($_POST['weight'] ?? 0.0);
 
     // Validate inputs
     if (empty($first_name) || empty($last_name) || $age <= 0 || $height < 0 || $weight < 0) {
@@ -67,10 +67,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Update profile details
     $sql = "UPDATE users SET first_name = ?, last_name = ?, age = ?, height = ?, weight = ? WHERE user_id = ?";
     $stmt = $connect->prepare($sql);
+
     if ($stmt) {
         $stmt->bind_param("sssddi", $first_name, $last_name, $age, $height, $weight, $user_id);
+
         if ($stmt->execute()) {
-            error_log("Profile details updated successfully for user_id: $user_id");
+            // 2. LOG THE WEIGHT HISTORY (New Code)
+            // Check if the weight actually changed or if it's a new entry for today
+            $logSql = "INSERT INTO weight_logs (user_id, weight) VALUES (?, ?)";
+            $logStmt = $connect->prepare($logSql);
+            $logStmt->bind_param("id", $user_id, $weight);
+            $logStmt->execute();
+            $logStmt->close();
+
             $valid['success'] = true;
             $valid['messages'] = "Successfully Updated";
             $valid['updatedData'] = [

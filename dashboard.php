@@ -27,9 +27,12 @@ $user_avatar = $user['profile_avatar'] ?? 'photos/user.png';
 $stmt->close();
 
 // --- API HANDLERS (AJAX) ---
+// (Existing API Handlers for Calories, Protein, Carbs, Totals, Meal/Water Insert... keep these as they were)
+// ... [Preserve all your existing AJAX logic here] ...
 
 // Fetch Calories
 if (isset($_GET['fetch_calorie_data'])) {
+    // ... (Keep existing code)
     $todayCaloriesQuery = "SELECT SUM(calories) AS total_calories FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
     $stmt = $connect->prepare($todayCaloriesQuery);
     $stmt->bind_param("i", $user_id);
@@ -75,6 +78,7 @@ if (isset($_GET['fetch_calorie_data'])) {
 
 // Fetch Protein
 if (isset($_GET['fetch_protein_data'])) {
+    // ... (Keep existing code)
     $todayProteinQuery = "SELECT SUM(protein) AS total_protein FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
     $stmt = $connect->prepare($todayProteinQuery);
     $stmt->bind_param("i", $user_id);
@@ -120,6 +124,7 @@ if (isset($_GET['fetch_protein_data'])) {
 
 // Fetch Carbs
 if (isset($_GET['fetch_carbs_data'])) {
+    // ... (Keep existing code)
     $todayCarbsQuery = "SELECT SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
     $stmt = $connect->prepare($todayCarbsQuery);
     $stmt->bind_param("i", $user_id);
@@ -165,6 +170,7 @@ if (isset($_GET['fetch_carbs_data'])) {
 
 // Fetch Totals (Water + Summary)
 if (isset($_GET['fetch_totals'])) {
+    // ... (Keep existing code)
     $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
     $stmt = $connect->prepare($totalIntakeQuery);
     $stmt->bind_param("i", $user_id);
@@ -179,26 +185,19 @@ if (isset($_GET['fetch_totals'])) {
     $waterIntakeResult = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    $userQuery = "SELECT water_goal FROM users WHERE user_id = ?";
-    $stmt = $connect->prepare($userQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $userResult = $stmt->get_result()->fetch_assoc();
-    $waterGoal = $userResult['water_goal'] ?? 2.0;
-    $stmt->close();
-
     echo json_encode([
         'totalCalories' => $totalIntakeResult['total_calories'] ?: 0,
         'totalProtein' => $totalIntakeResult['total_protein'] ?: 0,
         'totalCarbs' => $totalIntakeResult['total_carbs'] ?: 0,
         'totalWater' => $waterIntakeResult['total_water'] ?: 0,
-        'waterGoal' => $waterGoal
+        'waterGoalGlasses' => 8
     ]);
     exit();
 }
 
 // Handle Meal Insertion
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['water_amount'])) {
+    // ... (Keep existing code)
     $input = json_decode(file_get_contents('php://input'), true);
 
     if ($input && isset($input['meal_name'])) {
@@ -213,7 +212,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['water_amount'])) {
         $carbs = $_POST['carbs'] ?? 0;
     }
 
-    if (empty($meal_name) || !is_numeric($calories) || !is_numeric($protein) || !is_numeric($carbs)) {
+    if (empty($meal_name) || !is_numeric($calories)) {
         echo json_encode(["error" => "Invalid input data"]);
         exit();
     }
@@ -232,7 +231,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['water_amount'])) {
 
 // Handle Water Insertion
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['water_amount'])) {
-    $waterAmount = $_POST['water_amount'];
+    // ... (Keep existing code)
+    $waterAmount = $_POST['water_amount']; 
     $stmt = $connect->prepare("INSERT INTO water_intake (user_id, amount) VALUES (?, ?)");
     $stmt->bind_param("id", $user_id, $waterAmount);
     
@@ -260,13 +260,21 @@ $totalProtein = $totalIntakeResult['total_protein'] ?: 0;
 $totalCarbs = $totalIntakeResult['total_carbs'] ?: 0;
 $stmt->close();
 
-// 2. FETCH POSTS FOR THE FEED (FIXED & MERGED)
-$sql_posts = "SELECT * FROM posts ORDER BY post_time DESC LIMIT 10"; 
+// ==================================================
+// 2. FETCH POSTS WITH LIKES & COMMENTS (UPDATED)
+// ==================================================
+$sql_posts = "SELECT p.*,
+    (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) as like_count,
+    (SELECT COUNT(*) FROM post_comments WHERE post_id = p.post_id) as comment_count
+    FROM posts p
+    ORDER BY post_time DESC LIMIT 10";
 $result_posts = $connect->query($sql_posts);
 
 $posts = [];
-while ($row = $result_posts->fetch_assoc()) {
-    $posts[] = $row;
+if ($result_posts) {
+    while ($row = $result_posts->fetch_assoc()) {
+        $posts[] = $row;
+    }
 }
 
 $connect->close();
@@ -291,9 +299,21 @@ $connect->close();
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 
-<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
+<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen" x-data="{ sidebarToggle: false }">
 
     <div class="flex h-screen overflow-hidden">
         
@@ -301,9 +321,17 @@ $connect->close();
 
         <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             
-            <div :class="sidebarToggle ? 'block lg:hidden' : 'hidden'" class="fixed z-20 h-screen w-full bg-gray-900/50 hidden"></div>
+            <div :class="sidebarToggle ? 'block lg:hidden' : 'hidden'" class="fixed z-20 h-screen w-full bg-gray-900/50 hidden" @click="sidebarToggle = false"></div>
 
             <main class="w-full bg-gray-50 min-h-screen transition-all duration-200 ease-in-out">
+                
+                <div class="lg:hidden flex items-center justify-between bg-white p-4 border-b border-gray-200">
+                    <span class="font-bold text-xl text-gray-800">Dashboard</span>
+                    <button @click="sidebarToggle = !sidebarToggle" class="text-gray-600 focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+
                 <div class="p-6 mx-auto max-w-7xl">
                     
                     <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -372,37 +400,7 @@ $connect->close();
                                     <span class="text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded">Today</span>
                                 </div>
 
-                                <div class="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100 mb-4">
-                                    <div class="flex items-center gap-4">
-                                        <div class="p-3 bg-white rounded-full text-blue-500 shadow-sm">
-                                            <i class="fas fa-tint"></i>
-                                        </div>
-                                        <div>
-                                            <h5 class="font-semibold text-gray-900">Hydration Check</h5>
-                                            <p class="text-sm text-gray-500">Track your water intake (Target: <span id="waterGoal">2</span> L)</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center gap-3">
-                                        <div id="waterInputContainer" class="flex items-center gap-2">
-                                            <input type="number" id="waterInput" placeholder="ml" class="w-20 px-2 py-1 text-sm border rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                                            <button onclick="logWaterIntake()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg text-sm transition">Log</button>
-                                        </div>
-                                        <div id="waterGoalReached" class="hidden text-green-600 font-bold text-sm">Goal Reached! 🎉</div>
-                                        <button id="check-button" onclick="toggleCheck()" class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 text-gray-300 hover:border-green-500 hover:text-green-500 transition-all">
-                                            <svg id="check-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="water-saved-message" class="text-center text-xs text-green-600 font-semibold opacity-0 transition-opacity duration-500 mb-4">
-                                    ✅ Hydration logged!
-                                </div>
-                                <div id="saved-message" class="text-center text-xs text-green-600 font-semibold opacity-0 transition-opacity duration-500 mb-4">
-                                    ✅ Great Job!
-                                </div>
-
-                                <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 mb-2">
                                     <div class="flex items-center gap-4 w-full sm:w-auto mb-3 sm:mb-0">
                                         <div class="p-3 bg-white rounded-full text-orange-500 shadow-sm">
                                             <i class="fas fa-utensils"></i>
@@ -413,11 +411,37 @@ $connect->close();
                                         </div>
                                     </div>
                                     <div class="flex w-full sm:w-auto gap-2">
-                                        <input type="text" id="foodInput" class="w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-orange-500 focus:border-orange-500" placeholder="e.g. 1 apple">
-                                        <button onclick="fetchCalories()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-md shadow-orange-200">
-                                            Add
+                                        <button onclick="openFoodModal()" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-md shadow-orange-200 flex items-center justify-center gap-2">
+                                            <i class="fas fa-plus"></i> Add Meal
                                         </button>
                                     </div>
+                                </div>
+
+                                <div class="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100 mb-4">
+                                    <div class="flex items-center gap-4">
+                                        <div class="p-3 bg-white rounded-full text-blue-500 shadow-sm">
+                                            <i class="fas fa-tint"></i>
+                                        </div>
+                                        <div>
+                                            <h5 class="font-semibold text-gray-900">Hydration Check</h5>
+                                            <p class="text-sm text-gray-500">Target: 8 Glasses</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <div id="waterInputContainer" class="flex items-center gap-2">
+                                            <button onclick="logWaterIntake()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition shadow-md shadow-blue-200 flex items-center gap-2">
+                                                <i class="fas fa-plus"></i> Add Glass
+                                            </button>
+                                        </div>
+                                        <div id="waterGoalReached" class="hidden text-green-600 font-bold text-sm bg-green-100 px-3 py-1 rounded-full">Goal Reached! 🎉</div>
+                                    </div>
+                                </div>
+
+                                <div id="water-saved-message" class="text-center text-xs text-green-600 font-semibold opacity-0 transition-opacity duration-500 mb-4">
+                                    ✅ Hydration logged!
+                                </div>
+                                <div id="saved-message" class="text-center text-xs text-green-600 font-semibold opacity-0 transition-opacity duration-500 mb-4">
+                                    ✅ Meal Saved!
                                 </div>
 
                                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
@@ -434,7 +458,7 @@ $connect->close();
                                         <span id="bmr3" class="text-lg font-bold text-gray-800"><?= htmlspecialchars($totalCarbs) ?>g</span>
                                     </div>
                                     <div class="text-center p-3 bg-cyan-50 rounded-lg">
-                                        <span class="block text-xs text-cyan-600 font-bold uppercase">Water</span>
+                                        <span class="block text-xs text-cyan-600 font-bold uppercase">Glasses</span>
                                         <span id="bmr4" class="text-lg font-bold text-gray-800">Loading...</span>
                                     </div>
                                 </div>
@@ -443,31 +467,39 @@ $connect->close();
 
                         <div class="col-span-12 lg:col-span-4">
                             <div class="bg-white rounded-2xl border border-gray-200 shadow-lg h-[600px] flex flex-col">
+                                
                                 <div class="p-4 border-b border-gray-100 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-t-2xl">
-                                    <h3 class="text-white font-bold flex items-center gap-2">
-                                        <i class="fas fa-users"></i> Community Feed
+                                    <h3 class="text-black font-bold text-lg uppercase flex items-center gap-2">
+                                        <i class="fas fa-clock"></i> RECENT POSTS
                                     </h3>
                                 </div>
                                 
                                 <div id="news-feed" class="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-200">
                                     <?php if (!empty($posts)): ?>
                                         <?php foreach ($posts as $post): ?>
-                                            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-white hover:shadow-md transition duration-200">
-                                                <div class="flex items-start space-x-3">
-                                                    <img src="<?php echo htmlspecialchars($post['user_avatar'] ?? 'photos/user.png'); ?>" 
-                                                         alt="User" 
-                                                         class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm">
-                                                    <div>
-                                                        <div class="flex items-center gap-2">
-                                                            <p class="font-bold text-gray-900 text-sm"><?php echo htmlspecialchars($post['user_name']); ?></p>
-                                                            <span class="text-xs text-gray-400">• <?php echo date("M d", strtotime($post['post_time'])); ?></span>
+                                            <a href="sns.php?highlight=<?= $post['post_id'] ?>" class="block">
+                                                <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-white hover:shadow-md transition duration-200 group">
+                                                    <div class="flex items-start space-x-3">
+                                                        <img src="<?php echo htmlspecialchars($post['user_avatar'] ?? 'photos/user.png'); ?>" 
+                                                             alt="User" 
+                                                             class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm">
+                                                        <div class="flex-1">
+                                                            <div class="flex items-center gap-2">
+                                                                <p class="font-bold text-gray-900 text-sm group-hover:text-indigo-600 transition"><?php echo htmlspecialchars($post['user_name']); ?></p>
+                                                                <span class="text-xs text-gray-400">• <?php echo date("M d", strtotime($post['post_time'])); ?></span>
+                                                            </div>
+                                                            <p class="mt-1 text-sm text-gray-600 leading-relaxed line-clamp-2">
+                                                                <?php echo htmlspecialchars($post['post_content']); ?>
+                                                            </p>
+                                                            
+                                                            <div class="flex gap-4 mt-3 text-xs text-gray-400">
+                                                                <span class="flex items-center gap-1"><i class="fas fa-heart text-red-400"></i> <?= $post['like_count'] ?></span>
+                                                                <span class="flex items-center gap-1"><i class="fas fa-comment text-blue-400"></i> <?= $post['comment_count'] ?></span>
+                                                            </div>
                                                         </div>
-                                                        <p class="mt-1 text-sm text-gray-600 leading-relaxed">
-                                                            <?php echo htmlspecialchars($post['post_content']); ?>
-                                                        </p>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         <?php endforeach; ?>
                                     <?php else: ?>
                                         <div class="text-center text-gray-400 py-10">
@@ -479,90 +511,178 @@ $connect->close();
                             </div>
                         </div>
 
-                    </div> </div>
+                    </div> 
+                </div>
             </main>
         </div>
     </div>
 
-    <script>
-        function toggleCheck() {
-            const button = document.getElementById("check-button");
-            const icon = document.getElementById("check-icon");
-            const message = document.getElementById("saved-message");
-            const isChecked = button.classList.contains("bg-green-500");
+    <div id="foodModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeFoodModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start w-full">
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Log a Meal</h3>
+                            <div class="mt-4">
+                                <div class="relative">
+                                    <input type="text" id="modalFoodSearch" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" placeholder="Search for food (e.g. apple, burger)">
+                                    <div id="searchLoader" class="absolute right-3 top-3 hidden loader"></div>
+                                </div>
+                                <div id="foodResults" class="mt-2 max-h-40 overflow-y-auto text-sm text-gray-600 border-t border-gray-100 hidden"></div>
+                                <div id="selectedItemDetails" class="mt-4 hidden bg-orange-50 p-4 rounded-lg">
+                                    <h4 id="selectedFoodName" class="font-bold text-orange-800"></h4>
+                                    <div class="grid grid-cols-3 gap-2 mt-2 text-xs text-gray-600">
+                                        <div>Cal: <span id="selCal">0</span></div>
+                                        <div>Prot: <span id="selProt">0</span>g</div>
+                                        <div>Carb: <span id="selCarb">0</span>g</div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <label class="block text-xs font-bold text-gray-700">Amount (grams)</label>
+                                        <input type="number" id="servingSize" value="100" class="mt-1 w-24 px-2 py-1 border rounded text-sm">
+                                        <p class="text-[10px] text-gray-400 mt-1">Macros will adjust automatically.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" onclick="confirmMeal()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-orange-600 text-base font-medium text-white hover:bg-orange-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Add</button>
+                    <button type="button" onclick="closeFoodModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            if (!isChecked) {
-                button.classList.add("bg-green-500", "border-green-500", "text-white");
-                button.classList.remove("border-gray-300", "text-gray-300");
-                message.classList.remove("opacity-0");
-            } else {
-                button.classList.remove("bg-green-500", "border-green-500", "text-white");
-                button.classList.add("border-gray-300", "text-gray-300");
-                message.classList.add("opacity-0");
-            }
+    <script>
+        // --- Modal Logic ---
+        let currentSelectedFood = null;
+        let searchTimeout = null;
+
+        function openFoodModal() {
+            document.getElementById('foodModal').classList.remove('hidden');
+            document.getElementById('modalFoodSearch').focus();
         }
 
-        async function fetchCalories() {
-            const query = document.getElementById("foodInput").value;
-            if (!query) {
-                alert("Please enter a food item.");
+        function closeFoodModal() {
+            document.getElementById('foodModal').classList.add('hidden');
+            document.getElementById('modalFoodSearch').value = '';
+            document.getElementById('foodResults').classList.add('hidden');
+            document.getElementById('selectedItemDetails').classList.add('hidden');
+            currentSelectedFood = null;
+        }
+
+        // Live Search
+        document.getElementById('modalFoodSearch').addEventListener('keyup', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value;
+            if(query.length < 2) return;
+
+            document.getElementById('searchLoader').classList.remove('hidden');
+
+            searchTimeout = setTimeout(async () => {
+                const apiKey = "FmEM2rbCs+c9j0rAbzaJRA==IVZqSzB9NOhvqjAs"; 
+                const url = `https://api.calorieninjas.com/v1/nutrition?query=${encodeURIComponent(query)}`;
+                
+                try {
+                    const response = await fetch(url, { headers: { 'X-Api-Key': apiKey } });
+                    const data = await response.json();
+                    
+                    const resultsDiv = document.getElementById('foodResults');
+                    resultsDiv.innerHTML = '';
+                    resultsDiv.classList.remove('hidden');
+                    document.getElementById('searchLoader').classList.add('hidden');
+
+                    if(data.items && data.items.length > 0) {
+                        data.items.forEach(item => {
+                            const div = document.createElement('div');
+                            div.className = "p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 flex justify-between items-center";
+                            div.innerHTML = `<span>${item.name}</span> <span class="text-xs text-gray-400">${item.calories} cal / 100g</span>`;
+                            div.onclick = () => selectFood(item);
+                            resultsDiv.appendChild(div);
+                        });
+                    } else {
+                        resultsDiv.innerHTML = '<div class="p-2 text-gray-400">No results found.</div>';
+                    }
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('searchLoader').classList.add('hidden');
+                }
+            }, 500);
+        });
+
+        function selectFood(item) {
+            currentSelectedFood = item;
+            document.getElementById('foodResults').classList.add('hidden');
+            document.getElementById('selectedItemDetails').classList.remove('hidden');
+            
+            document.getElementById('selectedFoodName').innerText = item.name;
+            document.getElementById('servingSize').value = item.serving_size_g;
+            
+            updateCalculatedMacros();
+        }
+
+        document.getElementById('servingSize').addEventListener('input', updateCalculatedMacros);
+
+        function updateCalculatedMacros() {
+            if(!currentSelectedFood) return;
+            const grams = parseFloat(document.getElementById('servingSize').value) || 0;
+            const ratio = grams / currentSelectedFood.serving_size_g;
+
+            document.getElementById('selCal').innerText = (currentSelectedFood.calories * ratio).toFixed(1);
+            document.getElementById('selProt').innerText = (currentSelectedFood.protein_g * ratio).toFixed(1);
+            document.getElementById('selCarb').innerText = (currentSelectedFood.carbohydrates_total_g * ratio).toFixed(1);
+        }
+
+        async function confirmMeal() {
+            if(!currentSelectedFood) {
+                alert("Please select a food item first.");
                 return;
             }
 
-            const apiKey = "FmEM2rbCs+c9j0rAbzaJRA==IVZqSzB9NOhvqjAs"; 
-            const url = `https://api.calorieninjas.com/v1/nutrition?query=${encodeURIComponent(query)}`;
+            const grams = parseFloat(document.getElementById('servingSize').value) || 0;
+            const ratio = grams / currentSelectedFood.serving_size_g;
+
+            const mealData = {
+                meal_name: `${currentSelectedFood.name} (${grams}g)`,
+                calories: (currentSelectedFood.calories * ratio).toFixed(1),
+                protein: (currentSelectedFood.protein_g * ratio).toFixed(1),
+                carbs: (currentSelectedFood.carbohydrates_total_g * ratio).toFixed(1)
+            };
 
             try {
-                const response = await fetch(url, {
-                    headers: { 'X-Api-Key': apiKey }
+                const response = await fetch('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(mealData)
                 });
-                const data = await response.json();
+                const result = await response.json();
 
-                if (data.items && data.items.length > 0) {
-                    let item = data.items[0];
-                    const mealData = {
-                        meal_name: query,
-                        calories: item.calories,
-                        protein: item.protein_g,
-                        carbs: item.carbohydrates_total_g
-                    };
-
-                    const addResponse = await fetch('', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(mealData)
-                    });
-
-                    const addResult = await addResponse.json();
-
-                    if (addResult.success) {
-                        alert("Meal added successfully!");
-                        document.getElementById("foodInput").value = ""; // Clear input
-                        updateTotals();
-                        updateCalorieData();
-                        updateProteinData();
-                        updateCarbsData();
-                    } else {
-                        alert("Error adding meal: " + (addResult.error || "Unknown error"));
-                    }
+                if (result.success) {
+                    const message = document.getElementById("saved-message");
+                    message.classList.remove("opacity-0");
+                    setTimeout(() => message.classList.add("opacity-0"), 3000);
+                    
+                    closeFoodModal();
+                    updateTotals();
+                    updateCalorieData();
+                    updateProteinData();
+                    updateCarbsData();
                 } else {
-                    alert("No nutritional data found for this food item.");
+                    alert("Error adding meal: " + (result.error || "Unknown error"));
                 }
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                alert("Error fetching nutritional data.");
+            } catch (e) {
+                alert("Connection error.");
             }
         }
 
         async function logWaterIntake() {
-            const waterAmount = document.getElementById("waterInput").value;
-            if (!waterAmount || waterAmount <= 0) {
-                alert("Please enter a valid amount of water (greater than 0).");
-                return;
-            }
-
+            const glassSize = 250; 
             const formData = new FormData();
-            formData.append("water_amount", waterAmount);
+            formData.append("water_amount", glassSize);
 
             try {
                 const response = await fetch('', {
@@ -575,13 +695,12 @@ $connect->close();
                     const message = document.getElementById("water-saved-message");
                     message.classList.remove("opacity-0");
                     setTimeout(() => message.classList.add("opacity-0"), 3000);
-                    document.getElementById("waterInput").value = '';
                     updateTotals();
                 } else {
-                    alert("Error logging water intake: " + (result.error || "Unknown error"));
+                    alert("Error logging water: " + (result.error || "Unknown error"));
                 }
             } catch (error) {
-                alert("Error logging water intake.");
+                alert("Error logging water.");
             }
         }
 
@@ -590,19 +709,20 @@ $connect->close();
                 const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_totals=1');
                 const data = await response.json();
                 if (data.totalCalories !== undefined) {
-                    document.getElementById("bmr1").innerHTML = `<strong>${data.totalCalories}</strong> kcal`;
-                    document.getElementById("bmr2").innerHTML = `<strong>${data.totalProtein}</strong> g`;
-                    document.getElementById("bmr3").innerHTML = `<strong>${data.totalCarbs}</strong> g`;
-                    document.getElementById("bmr4").innerHTML = `<strong>${data.totalWater}</strong> / ${data.waterGoal} L`;
+                    document.getElementById("bmr1").innerHTML = `<strong>${Math.round(data.totalCalories)}</strong> kcal`;
+                    document.getElementById("bmr2").innerHTML = `<strong>${Math.round(data.totalProtein)}</strong> g`;
+                    document.getElementById("bmr3").innerHTML = `<strong>${Math.round(data.totalCarbs)}</strong> g`;
+                    
+                    const glassesConsumed = Math.floor(data.totalWater / 250);
+                    const glassesGoal = data.waterGoalGlasses || 8; 
 
-                    const waterInputContainer = document.getElementById("waterInputContainer");
+                    document.getElementById("bmr4").innerHTML = `<strong>${glassesConsumed}</strong> / ${glassesGoal}`;
+
                     const waterGoalReached = document.getElementById("waterGoalReached");
                     
-                    if (parseFloat(data.totalWater) >= parseFloat(data.waterGoal)) {
-                        waterInputContainer.classList.add("hidden");
+                    if (glassesConsumed >= glassesGoal) {
                         waterGoalReached.classList.remove("hidden");
                     } else {
-                        waterInputContainer.classList.remove("hidden");
                         waterGoalReached.classList.add("hidden");
                     }
                 }
@@ -616,7 +736,7 @@ $connect->close();
                 const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_calorie_data=1');
                 const data = await response.json();
                 if (data.todayValue !== undefined) {
-                    document.getElementById("calorieIntake").innerText = `${data.todayValue.toLocaleString()} cal`;
+                    document.getElementById("calorieIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} cal`;
                     updateMetricData("calorie", data);
                 }
             } catch (error) { console.error(error); }
@@ -627,7 +747,7 @@ $connect->close();
                 const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_protein_data=1');
                 const data = await response.json();
                 if (data.todayValue !== undefined) {
-                    document.getElementById("proteinIntake").innerText = `${data.todayValue.toLocaleString()} g`;
+                    document.getElementById("proteinIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
                     updateMetricData("protein", data);
                 }
             } catch (error) { console.error(error); }
@@ -638,7 +758,7 @@ $connect->close();
                 const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_carbs_data=1');
                 const data = await response.json();
                 if (data.todayValue !== undefined) {
-                    document.getElementById("carbsIntake").innerText = `${data.todayValue.toLocaleString()} g`;
+                    document.getElementById("carbsIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
                     updateMetricData("carbs", data);
                 }
             } catch (error) { console.error(error); }

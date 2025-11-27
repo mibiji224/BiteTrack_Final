@@ -1,7 +1,10 @@
 <?php
-include 'db_connect.php'; // Ensure you have your database connection
+require_once 'db_connect.php'; // Use require_once to avoid double connection issues
 
-
+// Ensure session is active
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $user_id = $_SESSION['user_id'];
 
@@ -24,6 +27,8 @@ if ($result_user && $result_user->num_rows > 0) {
         'profile_avatar' => 'photos/user.png'
     ];
 }
+
 $stmt_user->close();
-$connect->close();
+// DO NOT close the connection here ($connect->close();)
+// because goals.php needs it for the weight graph later!
 ?>
