@@ -36,14 +36,15 @@ $menu_items = [
 <aside 
     :class="sidebarToggle ? 'translate-x-0' : '-translate-x-full'"
     class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto shrink-0 shadow-xl lg:shadow-none flex flex-col"
+    @click.away="sidebarToggle = false"
 >
     
     <div class="h-20 flex items-center justify-center border-b border-gray-50 shrink-0">
-        <a href="dashboard.php" class="flex items-center gap-2 group">
+        <a href="dashboard.php" class="flex items-center gap-3 group">
             <div class="p-2 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors duration-300">
                 <img src="photos/plan.png" class="h-8 w-auto" alt="BiteTrack Logo">
             </div>
-            <span class="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+            <span class="text-xl font-bold text-gray-800 tracking-tight group-hover:text-indigo-600 transition-colors">
                 BiteTrack
             </span>
         </a>
@@ -61,7 +62,7 @@ $menu_items = [
             $finalClass = $isActive ? $activeClass : $inactiveClass;
             $iconColor = $isActive ? "text-indigo-600" : "text-gray-400 group-hover:text-gray-600";
         ?>
-            <a href="<?= $item['link'] ?>" class="<?= $baseClass ?> <?= $finalClass ?>">
+            <a href="<?= $item['link'] ?>" class="<?= $baseClass ?> <?= $finalClass ?>" @click="sidebarToggle = false">
                 
                 <span class="<?= $iconColor ?> transition-colors duration-200 w-6 text-center flex justify-center">
                     <?= $item['icon'] ?>

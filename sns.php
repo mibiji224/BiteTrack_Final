@@ -2,7 +2,6 @@
 session_start();
 require_once 'php_action/db_connect.php';
 
-// 1. Check Login
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
     exit();
@@ -11,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 $_SESSION['last_sns_visit'] = time();
 
-// 2. Fetch Current User
+// Fetch Current User
 $sql_user = "SELECT user_name, profile_avatar FROM users WHERE user_id = ?";
 $stmt = $connect->prepare($sql_user);
 $stmt->bind_param("i", $user_id);
@@ -21,28 +20,26 @@ $user_name = $user['user_name'] ?? 'Unknown';
 $user_avatar = $user['profile_avatar'] ?? 'photos/user.png';
 $stmt->close();
 
-// 3. Determine Tab (Universal vs My Posts)
-$active_tab = $_GET['tab'] ?? 'universal'; // Default to 'universal'
+// Tabs Logic
+$active_tab = $_GET['tab'] ?? 'universal';
 
-// 4. Build Query Based on Tab
 $sql = "SELECT p.*, 
-       (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) as like_count,
-       (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id AND user_id = ?) as user_liked,
-       (SELECT COUNT(*) FROM post_comments WHERE post_id = p.post_id) as comment_count
-       FROM posts p ";
+        (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) as like_count,
+        (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id AND user_id = ?) as user_liked,
+        (SELECT COUNT(*) FROM post_comments WHERE post_id = p.post_id) as comment_count
+        FROM posts p ";
 
 if ($active_tab === 'my_posts') {
-    $sql .= "WHERE p.user_id = ? "; // Filter by current user
+    $sql .= "WHERE p.user_id = ? ";
 }
 
 $sql .= "ORDER BY p.post_time DESC";
-
 $stmt = $connect->prepare($sql);
 
 if ($active_tab === 'my_posts') {
-    $stmt->bind_param("ii", $user_id, $user_id); // Bind twice (one for like check, one for filter)
+    $stmt->bind_param("ii", $user_id, $user_id);
 } else {
-    $stmt->bind_param("i", $user_id); // Bind once (just for like check)
+    $stmt->bind_param("i", $user_id);
 }
 
 $stmt->execute();
@@ -65,20 +62,16 @@ $stmt->close();
     <link rel="stylesheet" href="css/sidebar.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
     <style>
-        /* Fix glitching/flashing elements on load */
         [x-cloak] { display: none !important; }
-        
         .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; max-height: 150px; overflow-y: auto; }
         .emoji-btn { font-size: 1.2rem; padding: 5px; cursor: pointer; border-radius: 5px; }
         .emoji-btn:hover { background: #f3f4f6; }
-        
-        /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
     </style>
 </head>
 
@@ -103,12 +96,10 @@ $stmt->close();
                 <div class="mx-auto max-w-3xl">
                     
                     <div class="flex space-x-1 bg-gray-200 p-1 rounded-xl mb-6 shadow-inner">
-                        <a href="?tab=universal" 
-                           class="flex-1 text-center py-2.5 text-sm font-bold rounded-lg transition-all <?= $active_tab === 'universal' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700' ?>">
+                        <a href="?tab=universal" class="flex-1 text-center py-2.5 text-sm font-bold rounded-lg transition-all <?= $active_tab === 'universal' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700' ?>">
                             <i class="fas fa-globe-americas mr-2"></i> Universal
                         </a>
-                        <a href="?tab=my_posts" 
-                           class="flex-1 text-center py-2.5 text-sm font-bold rounded-lg transition-all <?= $active_tab === 'my_posts' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700' ?>">
+                        <a href="?tab=my_posts" class="flex-1 text-center py-2.5 text-sm font-bold rounded-lg transition-all <?= $active_tab === 'my_posts' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700' ?>">
                             <i class="fas fa-user mr-2"></i> My Posts
                         </a>
                     </div>
@@ -118,7 +109,7 @@ $stmt->close();
                             <img src="<?php echo htmlspecialchars($user_avatar); ?>" class="w-12 h-12 rounded-full object-cover border border-gray-200 shrink-0">
                             
                             <div class="flex-1 relative" x-data="{ showEmojis: false }">
-                                <textarea id="postContent" name="content" rows="2" class="w-full bg-gray-50 border-0 rounded-xl p-3 text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition resize-none" placeholder="What's on your mind?" required></textarea>
+                                <textarea id="postContent" name="content" rows="2" class="w-full bg-gray-50 border-0 rounded-xl p-3 text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition resize-none" placeholder="What's on your mind?"></textarea>
                                 
                                 <div id="imagePreviewContainer" class="hidden mt-2 relative w-fit">
                                     <img id="imagePreview" src="" class="h-24 rounded-lg border">
@@ -152,12 +143,8 @@ $stmt->close();
                         <?php if (!empty($posts)): ?>
                             <?php foreach ($posts as $post): 
                                 $pid = $post['post_id'];
-                                
-                                // Fetch Comments
-                                $c_sql = "SELECT c.*, u.user_name, u.profile_avatar 
-                                          FROM post_comments c 
-                                          JOIN users u ON c.user_id = u.user_id 
-                                          WHERE c.post_id = ? ORDER BY c.created_at ASC";
+                                // Comments Query
+                                $c_sql = "SELECT c.*, u.user_name, u.profile_avatar FROM post_comments c JOIN users u ON c.user_id = u.user_id WHERE c.post_id = ? ORDER BY c.created_at ASC";
                                 $c_stmt = $connect->prepare($c_sql);
                                 $c_stmt->bind_param("i", $pid);
                                 $c_stmt->execute();
@@ -178,18 +165,22 @@ $stmt->close();
                                             <div class="relative">
                                                 <button @click="openDropdown = !openDropdown" class="text-gray-300 hover:text-gray-600 p-2"><i class="fas fa-ellipsis-h"></i></button>
                                                 <div x-show="openDropdown" x-cloak @click.away="openDropdown = false" class="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-xl border border-gray-100 z-10 overflow-hidden">
-                                                    <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-edit mr-2"></i> Edit</a>
-                                                    <a href="#" onclick="alert('Delete feature coming soon!')" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50"><i class="fas fa-trash-alt mr-2"></i> Delete</a>
+                                                    <a href="javascript:void(0)" onclick="openEditModal(<?= $pid ?>, `<?= addslashes(htmlspecialchars($post['post_content'])) ?>`)" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                                        <i class="fas fa-edit mr-2"></i> Edit
+                                                    </a>
+                                                    <a href="javascript:void(0)" onclick="deletePost(<?= $pid ?>)" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                                                        <i class="fas fa-trash-alt mr-2"></i> Delete
+                                                    </a>
                                                 </div>
                                             </div>
                                         <?php endif; ?>
                                     </div>
 
-                                    <p class="text-gray-800 leading-relaxed text-sm sm:text-base mb-3"><?php echo nl2br(htmlspecialchars($post['post_content'])); ?></p>
+                                    <p id="post-content-<?= $pid ?>" class="text-gray-800 leading-relaxed text-sm sm:text-base mb-3"><?php echo nl2br(htmlspecialchars($post['post_content'])); ?></p>
 
                                     <?php if (!empty($post['post_image'])): ?>
-                                        <div class="mb-4 rounded-xl overflow-hidden border border-gray-100">
-                                            <img src="<?php echo htmlspecialchars($post['post_image']); ?>" class="w-full h-auto object-cover max-h-[400px]">
+                                        <div class="mb-4 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+                                            <img src="<?php echo htmlspecialchars($post['post_image']); ?>" class="max-w-full h-auto block mx-auto object-contain max-h-[600px]">
                                         </div>
                                     <?php endif; ?>
 
@@ -216,7 +207,6 @@ $stmt->close();
                                                 </div>
                                             <?php endwhile; ?>
                                         </div>
-
                                         <form onsubmit="submitComment(event, <?= $pid ?>)" class="flex gap-2">
                                             <img src="<?= htmlspecialchars($user_avatar) ?>" class="w-8 h-8 rounded-full object-cover shrink-0">
                                             <div class="relative flex-1">
@@ -243,13 +233,79 @@ $stmt->close();
         </div>
     </div>
 
+    <div id="editPostModal" class="fixed inset-0 z-50 hidden bg-gray-900/60 backdrop-blur-sm flex justify-center items-center">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Edit Post</h3>
+            <form id="editPostForm">
+                <input type="hidden" id="editPostId" name="post_id">
+                <textarea id="editPostContent" name="content" rows="4" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500" required></textarea>
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
-        // Emoji logic
-        function insertEmoji(emoji) {
-            document.getElementById('postContent').value += emoji;
+        function deletePost(postId) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You won't be able to revert this!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('post_id', postId);
+
+                    fetch('php_action/delete_post.php', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('Deleted!', 'Your post has been deleted.', 'success');
+                            document.getElementById('post-' + postId).remove();
+                        } else {
+                            Swal.fire('Error', data.message || 'Could not delete post.', 'error');
+                        }
+                    });
+                }
+            });
         }
 
-        // Image Preview Logic
+        function openEditModal(postId, currentContent) {
+            document.getElementById('editPostId').value = postId;
+            document.getElementById('editPostContent').value = currentContent;
+            document.getElementById('editPostModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editPostModal').classList.add('hidden');
+        }
+
+        document.getElementById('editPostForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+
+            fetch('php_action/edit_post.php', { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const postId = document.getElementById('editPostId').value;
+                    const newContent = document.getElementById('editPostContent').value;
+                    document.getElementById('post-content-' + postId).innerText = newContent;
+                    closeEditModal();
+                    Swal.fire('Updated!', 'Your post has been updated.', 'success');
+                } else {
+                    Swal.fire('Error', data.message || 'Update failed.', 'error');
+                }
+            });
+        });
+
+        function insertEmoji(emoji) { document.getElementById('postContent').value += emoji; }
         function previewImage(input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -260,26 +316,19 @@ $stmt->close();
                 reader.readAsDataURL(input.files[0]);
             }
         }
-
         function clearImage() {
             document.getElementById('postImage').value = '';
             document.getElementById('imagePreviewContainer').classList.add('hidden');
         }
-
-        // Toggle Comments
         function toggleComments(postId) {
-            const section = document.getElementById(`comments-section-${postId}`);
-            section.classList.toggle('hidden');
+            document.getElementById(`comments-section-${postId}`).classList.toggle('hidden');
         }
-
-        // Like Logic (AJAX)
         function toggleLike(btn, postId) {
             const icon = btn.querySelector('i');
             const countSpan = btn.querySelector('.like-count');
             let count = parseInt(countSpan.innerText);
             const isLiking = !btn.classList.contains('text-red-500');
 
-            // Optimistic update
             if (isLiking) {
                 btn.classList.add('text-red-500', 'font-bold');
                 btn.classList.remove('text-gray-500');
@@ -294,14 +343,8 @@ $stmt->close();
 
             const formData = new FormData();
             formData.append('post_id', postId);
-
-            fetch('php_action/like_post.php', { method: 'POST', body: formData })
-            .then(res => res.json())
-            .then(data => { if (data.success) countSpan.innerText = data.new_count; })
-            .catch(err => console.error(err));
+            fetch('php_action/like_post.php', { method: 'POST', body: formData });
         }
-
-        // Comment Logic (AJAX)
         function submitComment(e, postId) {
             e.preventDefault();
             const form = e.target;
@@ -318,7 +361,7 @@ $stmt->close();
             .then(data => {
                 if (data.success) {
                     const list = document.getElementById(`comment-list-${postId}`);
-                    const newComment = `
+                    list.innerHTML += `
                         <div class="flex gap-3">
                             <img src="${data.user_avatar}" class="w-8 h-8 rounded-full object-cover shrink-0">
                             <div class="bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex-1">
@@ -326,34 +369,12 @@ $stmt->close();
                                 <p class="text-sm text-gray-600 break-words">${data.comment}</p>
                             </div>
                         </div>`;
-                    list.innerHTML += newComment;
                     input.value = '';
-                    
                     const countSpan = document.getElementById(`comment-count-${postId}`);
                     if (countSpan) countSpan.innerText = parseInt(countSpan.innerText || 0) + 1;
-
-                    list.scrollTop = list.scrollHeight;
                 }
-            })
-            .catch(err => console.error(err));
+            });
         }
-
-        // Highlight Post from Dashboard Link
-        document.addEventListener("DOMContentLoaded", function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const highlightId = urlParams.get('highlight');
-
-            if (highlightId) {
-                const postElement = document.getElementById('post-' + highlightId);
-                if (postElement) {
-                    postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    postElement.classList.add('ring-4', 'ring-indigo-300', 'bg-indigo-50');
-                    setTimeout(() => {
-                        postElement.classList.remove('ring-4', 'ring-indigo-300', 'bg-indigo-50');
-                    }, 3000);
-                }
-            }
-        });
     </script>
 </body>
 </html>

@@ -27,160 +27,98 @@ $user_avatar = $user['profile_avatar'] ?? 'photos/user.png';
 $stmt->close();
 
 // --- API HANDLERS (AJAX) ---
-// (Existing API Handlers for Calories, Protein, Carbs, Totals, Meal/Water Insert... keep these as they were)
-// ... [Preserve all your existing AJAX logic here] ...
 
-// Fetch Calories
+// Helper function to handle the comparison logic for all macros
+function getMacroData($connect, $user_id, $date, $column) {
+    // 1. Get Today's Sum using the Client's Date
+    $todayQuery = "SELECT SUM($column) AS total FROM meals WHERE user_id = ? AND DATE(date_added) = ?";
+    $stmt = $connect->prepare($todayQuery);
+    $stmt->bind_param("is", $user_id, $date);
+    $stmt->execute();
+    $todayVal = $stmt->get_result()->fetch_assoc()['total'] ?: 0;
+    $stmt->close();
+
+    // 2. Get Yesterday's Sum using Client's Date - 1 Day
+    $yesterdayQuery = "SELECT SUM($column) AS total FROM meals WHERE user_id = ? AND DATE(date_added) = DATE_SUB(?, INTERVAL 1 DAY)";
+    $stmt = $connect->prepare($yesterdayQuery);
+    $stmt->bind_param("is", $user_id, $date);
+    $stmt->execute();
+    $yesterdayVal = $stmt->get_result()->fetch_assoc()['total'] ?: 0;
+    $stmt->close();
+
+    // 3. Calculate Change (Today vs Yesterday)
+    $percentageChange = 0;
+    $comment = "No change from yesterday.";
+    $direction = "neutral";
+
+    if ($yesterdayVal > 0) {
+        $percentageChange = (($todayVal - $yesterdayVal) / $yesterdayVal) * 100;
+        $percentageChange = round($percentageChange, 2);
+        if ($percentageChange > 0) {
+            $comment = "Higher than yesterday.";
+            $direction = "increase";
+        } elseif ($percentageChange < 0) {
+            $comment = "Lower than yesterday.";
+            $direction = "decrease";
+        }
+    } elseif ($todayVal > 0) {
+        // Comparison if yesterday was 0 but today has data
+        $percentageChange = 100; 
+        $comment = "Higher than yesterday.";
+        $direction = "increase";
+    }
+
+    return [
+        'todayValue' => $todayVal,
+        'percentageChange' => abs($percentageChange),
+        'comment' => $comment,
+        'direction' => $direction
+    ];
+}
+
+// 1. Fetch Calories
 if (isset($_GET['fetch_calorie_data'])) {
-    // ... (Keep existing code)
-    $todayCaloriesQuery = "SELECT SUM(calories) AS total_calories FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
-    $stmt = $connect->prepare($todayCaloriesQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $todayResult = $stmt->get_result()->fetch_assoc();
-    $todayCalories = $todayResult['total_calories'] ?: 0;
-    $stmt->close();
-
-    $lastWeekCaloriesQuery = "SELECT SUM(calories) AS total_calories FROM meals WHERE user_id = ? AND DATE(date_added) BETWEEN DATE_SUB(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL 6 DAY) AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
-    $stmt = $connect->prepare($lastWeekCaloriesQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $lastWeekResult = $stmt->get_result()->fetch_assoc();
-    $lastWeekTotalCalories = $lastWeekResult['total_calories'] ?: 0;
-    $stmt->close();
-
-    $lastWeekAverageCalories = $lastWeekTotalCalories / 7;
-    $percentageChange = 0;
-    $comment = "No change from last week.";
-    $direction = "neutral";
-
-    if ($lastWeekAverageCalories > 0) {
-        $percentageChange = (($todayCalories - $lastWeekAverageCalories) / $lastWeekAverageCalories) * 100;
-        $percentageChange = round($percentageChange, 2);
-        if ($percentageChange > 0) {
-            $comment = "Higher than last week.";
-            $direction = "increase";
-        } elseif ($percentageChange < 0) {
-            $comment = "Lower than last week.";
-            $direction = "decrease";
-        }
-    }
-
-    echo json_encode([
-        'todayValue' => $todayCalories,
-        'percentageChange' => abs($percentageChange),
-        'comment' => $comment,
-        'direction' => $direction,
-        'type' => 'calories'
-    ]);
+    $date = $_GET['date'] ?? date('Y-m-d'); // Use client date if available
+    $data = getMacroData($connect, $user_id, $date, 'calories');
+    $data['type'] = 'calories';
+    echo json_encode($data);
     exit();
 }
 
-// Fetch Protein
+// 2. Fetch Protein
 if (isset($_GET['fetch_protein_data'])) {
-    // ... (Keep existing code)
-    $todayProteinQuery = "SELECT SUM(protein) AS total_protein FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
-    $stmt = $connect->prepare($todayProteinQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $todayResult = $stmt->get_result()->fetch_assoc();
-    $todayProtein = $todayResult['total_protein'] ?: 0;
-    $stmt->close();
-
-    $lastWeekProteinQuery = "SELECT SUM(protein) AS total_protein FROM meals WHERE user_id = ? AND DATE(date_added) BETWEEN DATE_SUB(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL 6 DAY) AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
-    $stmt = $connect->prepare($lastWeekProteinQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $lastWeekResult = $stmt->get_result()->fetch_assoc();
-    $lastWeekTotalProtein = $lastWeekResult['total_protein'] ?: 0;
-    $stmt->close();
-
-    $lastWeekAverageProtein = $lastWeekTotalProtein / 7;
-    $percentageChange = 0;
-    $comment = "No change from last week.";
-    $direction = "neutral";
-
-    if ($lastWeekAverageProtein > 0) {
-        $percentageChange = (($todayProtein - $lastWeekAverageProtein) / $lastWeekAverageProtein) * 100;
-        $percentageChange = round($percentageChange, 2);
-        if ($percentageChange > 0) {
-            $comment = "Higher than last week.";
-            $direction = "increase";
-        } elseif ($percentageChange < 0) {
-            $comment = "Lower than last week.";
-            $direction = "decrease";
-        }
-    }
-
-    echo json_encode([
-        'todayValue' => $todayProtein,
-        'percentageChange' => abs($percentageChange),
-        'comment' => $comment,
-        'direction' => $direction,
-        'type' => 'protein'
-    ]);
+    $date = $_GET['date'] ?? date('Y-m-d');
+    $data = getMacroData($connect, $user_id, $date, 'protein');
+    $data['type'] = 'protein';
+    echo json_encode($data);
     exit();
 }
 
-// Fetch Carbs
+// 3. Fetch Carbs
 if (isset($_GET['fetch_carbs_data'])) {
-    // ... (Keep existing code)
-    $todayCarbsQuery = "SELECT SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
-    $stmt = $connect->prepare($todayCarbsQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $todayResult = $stmt->get_result()->fetch_assoc();
-    $todayCarbs = $todayResult['total_carbs'] ?: 0;
-    $stmt->close();
-
-    $lastWeekCarbsQuery = "SELECT SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) BETWEEN DATE_SUB(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL 6 DAY) AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
-    $stmt = $connect->prepare($lastWeekCarbsQuery);
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $lastWeekResult = $stmt->get_result()->fetch_assoc();
-    $lastWeekTotalCarbs = $lastWeekResult['total_carbs'] ?: 0;
-    $stmt->close();
-
-    $lastWeekAverageCarbs = $lastWeekTotalCarbs / 7;
-    $percentageChange = 0;
-    $comment = "No change from last week.";
-    $direction = "neutral";
-
-    if ($lastWeekAverageCarbs > 0) {
-        $percentageChange = (($todayCarbs - $lastWeekAverageCarbs) / $lastWeekAverageCarbs) * 100;
-        $percentageChange = round($percentageChange, 2);
-        if ($percentageChange > 0) {
-            $comment = "Higher than last week.";
-            $direction = "increase";
-        } elseif ($percentageChange < 0) {
-            $comment = "Lower than last week.";
-            $direction = "decrease";
-        }
-    }
-
-    echo json_encode([
-        'todayValue' => $todayCarbs,
-        'percentageChange' => abs($percentageChange),
-        'comment' => $comment,
-        'direction' => $direction,
-        'type' => 'carbs'
-    ]);
+    $date = $_GET['date'] ?? date('Y-m-d');
+    $data = getMacroData($connect, $user_id, $date, 'carbs');
+    $data['type'] = 'carbs';
+    echo json_encode($data);
     exit();
 }
 
-// Fetch Totals (Water + Summary)
+// 4. Fetch Totals (Water + Summary)
 if (isset($_GET['fetch_totals'])) {
-    // ... (Keep existing code)
-    $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
+    $date = $_GET['date'] ?? date('Y-m-d'); // Use client date
+
+    // Meal Totals
+    $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = ?";
     $stmt = $connect->prepare($totalIntakeQuery);
-    $stmt->bind_param("i", $user_id);
+    $stmt->bind_param("is", $user_id, $date);
     $stmt->execute();
     $totalIntakeResult = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    $waterIntakeQuery = "SELECT SUM(amount) AS total_water FROM water_intake WHERE user_id = ? AND DATE(date_added) = CURDATE()";
+    // Water Totals
+    $waterIntakeQuery = "SELECT SUM(amount) AS total_water FROM water_intake WHERE user_id = ? AND DATE(date_added) = ?";
     $stmt = $connect->prepare($waterIntakeQuery);
-    $stmt->bind_param("i", $user_id);
+    $stmt->bind_param("is", $user_id, $date);
     $stmt->execute();
     $waterIntakeResult = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -197,7 +135,6 @@ if (isset($_GET['fetch_totals'])) {
 
 // Handle Meal Insertion
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['water_amount'])) {
-    // ... (Keep existing code)
     $input = json_decode(file_get_contents('php://input'), true);
 
     if ($input && isset($input['meal_name'])) {
@@ -231,7 +168,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['water_amount'])) {
 
 // Handle Water Insertion
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['water_amount'])) {
-    // ... (Keep existing code)
     $waterAmount = $_POST['water_amount']; 
     $stmt = $connect->prepare("INSERT INTO water_intake (user_id, amount) VALUES (?, ?)");
     $stmt->bind_param("id", $user_id, $waterAmount);
@@ -247,9 +183,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['water_amount'])) {
 
 // --- INITIAL PAGE LOAD DATA ---
 
+// We still fetch initial server-side data to prevent layout shift before JS kicks in
 $today = date('Y-m-d');
-
-// Fetch today's totals for initial render (PHP Side)
 $totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs FROM meals WHERE user_id = ? AND DATE(date_added) = CURDATE()";
 $stmt = $connect->prepare($totalIntakeQuery);
 $stmt->bind_param("i", $user_id);
@@ -261,7 +196,7 @@ $totalCarbs = $totalIntakeResult['total_carbs'] ?: 0;
 $stmt->close();
 
 // ==================================================
-// 2. FETCH POSTS WITH LIKES & COMMENTS (UPDATED)
+// 2. FETCH POSTS WITH LIKES & COMMENTS
 // ==================================================
 $sql_posts = "SELECT p.*,
     (SELECT COUNT(*) FROM post_likes WHERE post_id = p.post_id) as like_count,
@@ -286,7 +221,6 @@ $connect->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script defer src="script.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <title>BiteTrack - Dashboard</title>
     <script src="js/food_db_api.js"></script>
@@ -340,7 +274,7 @@ $connect->close();
                             <p class="text-sm text-gray-500">Here's what's happening with your nutrition today.</p>
                         </div>
                         <div class="mt-4 sm:mt-0">
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                            <span id="currentDateDisplay" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                                 <?= date("l, F j") ?>
                             </span>
                         </div>
@@ -428,12 +362,13 @@ $connect->close();
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-3">
+                                        <div id="waterGoalReached" class="hidden text-green-600 font-bold text-sm bg-green-100 px-3 py-1 rounded-full">Goal Reached! 🎉</div>
+                                        
                                         <div id="waterInputContainer" class="flex items-center gap-2">
                                             <button onclick="logWaterIntake()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition shadow-md shadow-blue-200 flex items-center gap-2">
                                                 <i class="fas fa-plus"></i> Add Glass
                                             </button>
                                         </div>
-                                        <div id="waterGoalReached" class="hidden text-green-600 font-bold text-sm bg-green-100 px-3 py-1 rounded-full">Goal Reached! 🎉</div>
                                     </div>
                                 </div>
 
@@ -491,6 +426,12 @@ $connect->close();
                                                             <p class="mt-1 text-sm text-gray-600 leading-relaxed line-clamp-2">
                                                                 <?php echo htmlspecialchars($post['post_content']); ?>
                                                             </p>
+                                                            
+                                                            <?php if (!empty($post['post_image'])): ?>
+                                                                <span class="block mt-2 text-xs font-medium text-blue-600 hover:underline">
+                                                                    <i class="fas fa-image"></i> View Image
+                                                                </span>
+                                                            <?php endif; ?>
                                                             
                                                             <div class="flex gap-4 mt-3 text-xs text-gray-400">
                                                                 <span class="flex items-center gap-1"><i class="fas fa-heart text-red-400"></i> <?= $post['like_count'] ?></span>
@@ -558,6 +499,114 @@ $connect->close();
     </div>
 
     <script>
+        // --- 1. Universal Timezone Sync Logic ---
+        function getClientDate() {
+            const now = new Date();
+            // This handles the timezone offset ensuring we get the user's correct local YYYY-MM-DD
+            const offset = now.getTimezoneOffset();
+            const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+            return localDate.toISOString().split('T')[0];
+        }
+
+        function formatDisplayDate(dateStr) {
+            const date = new Date(dateStr);
+            const options = { weekday: 'long', month: 'long', day: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        // --- 2. Update Fetch Calls to include Date ---
+        
+        async function updateTotals() {
+            try {
+                const date = getClientDate();
+                // Append date to URL
+                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + `fetch_totals=1&date=${date}`);
+                const data = await response.json();
+                
+                if (data.totalCalories !== undefined) {
+                    document.getElementById("bmr1").innerHTML = `<strong>${Math.round(data.totalCalories)}</strong> kcal`;
+                    document.getElementById("bmr2").innerHTML = `<strong>${Math.round(data.totalProtein)}</strong> g`;
+                    document.getElementById("bmr3").innerHTML = `<strong>${Math.round(data.totalCarbs)}</strong> g`;
+                    
+                    const glassesConsumed = Math.floor(data.totalWater / 250);
+                    const glassesGoal = data.waterGoalGlasses || 8; 
+
+                    document.getElementById("bmr4").innerHTML = `<strong>${glassesConsumed}</strong> / ${glassesGoal}`;
+
+                    const waterGoalReached = document.getElementById("waterGoalReached");
+                    
+                    if (glassesConsumed >= glassesGoal) {
+                        waterGoalReached.classList.remove("hidden");
+                    } else {
+                        waterGoalReached.classList.add("hidden");
+                    }
+                }
+            } catch (error) {
+                console.error("Error updating totals:", error);
+            }
+        }
+
+        async function updateCalorieData() {
+            try {
+                const date = getClientDate();
+                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + `fetch_calorie_data=1&date=${date}`);
+                const data = await response.json();
+                if (data.todayValue !== undefined) {
+                    document.getElementById("calorieIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} cal`;
+                    updateMetricData("calorie", data);
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function updateProteinData() {
+            try {
+                const date = getClientDate();
+                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + `fetch_protein_data=1&date=${date}`);
+                const data = await response.json();
+                if (data.todayValue !== undefined) {
+                    document.getElementById("proteinIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
+                    updateMetricData("protein", data);
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function updateCarbsData() {
+            try {
+                const date = getClientDate();
+                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + `fetch_carbs_data=1&date=${date}`);
+                const data = await response.json();
+                if (data.todayValue !== undefined) {
+                    document.getElementById("carbsIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
+                    updateMetricData("carbs", data);
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        function updateMetricData(type, data) {
+            const changeElement = document.getElementById(`${type}Change`);
+            const changeIcon = document.getElementById(`${type}ChangeIcon`);
+            const changeValue = document.getElementById(`${type}ChangeValue`);
+            const commentElement = document.getElementById(`${type}Comment`);
+
+            changeValue.innerText = `${data.percentageChange}%`;
+            if(commentElement) commentElement.innerText = data.comment;
+
+            let iconUp = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>`;
+            let iconDown = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>`;
+            let iconFlat = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>`;
+
+            if (data.direction === "increase") {
+                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-green-100 text-green-600";
+                changeIcon.innerHTML = iconUp;
+            } else if (data.direction === "decrease") {
+                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-red-100 text-red-600";
+                changeIcon.innerHTML = iconDown;
+            } else {
+                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-gray-100 text-gray-600";
+                changeIcon.innerHTML = iconFlat;
+            }
+        }
+
         // --- Modal Logic ---
         let currentSelectedFood = null;
         let searchTimeout = null;
@@ -704,93 +753,12 @@ $connect->close();
             }
         }
 
-        async function updateTotals() {
-            try {
-                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_totals=1');
-                const data = await response.json();
-                if (data.totalCalories !== undefined) {
-                    document.getElementById("bmr1").innerHTML = `<strong>${Math.round(data.totalCalories)}</strong> kcal`;
-                    document.getElementById("bmr2").innerHTML = `<strong>${Math.round(data.totalProtein)}</strong> g`;
-                    document.getElementById("bmr3").innerHTML = `<strong>${Math.round(data.totalCarbs)}</strong> g`;
-                    
-                    const glassesConsumed = Math.floor(data.totalWater / 250);
-                    const glassesGoal = data.waterGoalGlasses || 8; 
-
-                    document.getElementById("bmr4").innerHTML = `<strong>${glassesConsumed}</strong> / ${glassesGoal}`;
-
-                    const waterGoalReached = document.getElementById("waterGoalReached");
-                    
-                    if (glassesConsumed >= glassesGoal) {
-                        waterGoalReached.classList.remove("hidden");
-                    } else {
-                        waterGoalReached.classList.add("hidden");
-                    }
-                }
-            } catch (error) {
-                console.error("Error updating totals:", error);
-            }
-        }
-
-        async function updateCalorieData() {
-            try {
-                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_calorie_data=1');
-                const data = await response.json();
-                if (data.todayValue !== undefined) {
-                    document.getElementById("calorieIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} cal`;
-                    updateMetricData("calorie", data);
-                }
-            } catch (error) { console.error(error); }
-        }
-
-        async function updateProteinData() {
-            try {
-                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_protein_data=1');
-                const data = await response.json();
-                if (data.todayValue !== undefined) {
-                    document.getElementById("proteinIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
-                    updateMetricData("protein", data);
-                }
-            } catch (error) { console.error(error); }
-        }
-
-        async function updateCarbsData() {
-            try {
-                const response = await fetch(window.location.href + (window.location.search ? '&' : '?') + 'fetch_carbs_data=1');
-                const data = await response.json();
-                if (data.todayValue !== undefined) {
-                    document.getElementById("carbsIntake").innerText = `${Math.round(data.todayValue).toLocaleString()} g`;
-                    updateMetricData("carbs", data);
-                }
-            } catch (error) { console.error(error); }
-        }
-
-        function updateMetricData(type, data) {
-            const changeElement = document.getElementById(`${type}Change`);
-            const changeIcon = document.getElementById(`${type}ChangeIcon`);
-            const changeValue = document.getElementById(`${type}ChangeValue`);
-            const commentElement = document.getElementById(`${type}Comment`);
-
-            changeValue.innerText = `${data.percentageChange}%`;
-            if(commentElement) commentElement.innerText = data.comment;
-
-            let iconUp = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>`;
-            let iconDown = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>`;
-            let iconFlat = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>`;
-
-            if (data.direction === "increase") {
-                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-green-100 text-green-600";
-                changeIcon.innerHTML = iconUp;
-            } else if (data.direction === "decrease") {
-                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-red-100 text-red-600";
-                changeIcon.innerHTML = iconDown;
-            } else {
-                changeElement.className = "flex items-center gap-1 rounded-full py-1 px-2 text-xs font-medium bg-gray-100 text-gray-600";
-                changeIcon.innerHTML = iconFlat;
-            }
-        }
-
         // Init
         document.addEventListener("DOMContentLoaded", function() {
+            // Update display date from JS
+            const clientDate = getClientDate();
+            document.getElementById("currentDateDisplay").innerText = formatDisplayDate(clientDate);
+
             updateCalorieData();
             updateProteinData();
             updateCarbsData();

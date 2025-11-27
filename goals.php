@@ -1,10 +1,8 @@
 <?php
-// Include database connection and helper scripts
 include 'php_action/db_connect.php';
-include 'php_action/fetch_goals.php';
 include 'php_action/get_profile.php';
 
-// Ensure session is started (fetch_goals.php might start it, but safe to check)
+// Ensure session is started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -17,25 +15,127 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
+// ==========================================
+//  AJAX API: Fetch Goals & Data based on Client Date
+// ==========================================
+if (isset($_GET['fetch_goals_data'])) {
+    $date = $_GET['date'] ?? date('Y-m-d');
+    
+    // 1. Fetch User Goals
+    $sql_goal = "SELECT daily_calories AS calories, protein_goal AS protein, carbs_goal AS carbs 
+                 FROM goals WHERE user_id = ? ORDER BY goal_id DESC LIMIT 1";
+    $stmt = $connect->prepare($sql_goal);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $goal = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    // Default goals if not set
+    $dailyGoal = [
+        "calories" => $goal['calories'] ?? 2000,
+        "protein" => $goal['protein'] ?? 150,
+        "carbs" => $goal['carbs'] ?? 250
+    ];
+
+    // 2. Fetch Today's Intake (Using Client Date)
+    $sql_intake = "SELECT SUM(calories) AS val_cal, SUM(protein) AS val_prot, SUM(carbs) AS val_carb 
+                   FROM meals WHERE user_id = ? AND DATE(date_added) = ?";
+    $stmt = $connect->prepare($sql_intake);
+    $stmt->bind_param("is", $user_id, $date);
+    $stmt->execute();
+    $intake = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    $dailyIntake = [
+        "calories" => (int)($intake['val_cal'] ?? 0),
+        "protein" => (int)($intake['val_prot'] ?? 0),
+        "carbs" => (int)($intake['val_carb'] ?? 0)
+    ];
+
+    // 3. Fetch Weekly Intake (Last 7 Days from Client Date)
+    $sql_weekly = "SELECT SUM(calories) AS val_cal, SUM(protein) AS val_prot, SUM(carbs) AS val_carb 
+                   FROM meals WHERE user_id = ? AND DATE(date_added) BETWEEN DATE_SUB(?, INTERVAL 6 DAY) AND ?";
+    $stmt = $connect->prepare($sql_weekly);
+    $stmt->bind_param("iss", $user_id, $date, $date);
+    $stmt->execute();
+    $wIntake = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    // 4. Fetch Chart Data (History Trends)
+    $sql_chart = "SELECT DATE(date_added) as log_date, 
+                         SUM(calories) as total_calories, 
+                         SUM(protein) as total_protein, 
+                         SUM(carbs) as total_carbs 
+                  FROM meals 
+                  WHERE user_id = ? AND DATE(date_added) BETWEEN DATE_SUB(?, INTERVAL 6 DAY) AND ?
+                  GROUP BY DATE(date_added) 
+                  ORDER BY DATE(date_added) ASC";
+    $stmt = $connect->prepare($sql_chart);
+    $stmt->bind_param("iss", $user_id, $date, $date);
+    $stmt->execute();
+    $result_chart = $stmt->get_result();
+
+    $historyDates = [];
+    $historyCal = [];
+    $historyProt = [];
+    $historyCarb = [];
+
+    // Initialize map to ensure all 7 days show even if empty
+    $chartDataMap = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $d = date('Y-m-d', strtotime("$date -$i days"));
+        $displayDate = date('M d', strtotime($d));
+        $historyDates[] = $displayDate;
+        $chartDataMap[$d] = ['cal' => 0, 'prot' => 0, 'carb' => 0];
+    }
+
+    // Fill map with actual data
+    while ($row = $result_chart->fetch_assoc()) {
+        $d = $row['log_date'];
+        if (isset($chartDataMap[$d])) {
+            $chartDataMap[$d]['cal'] = (int)$row['total_calories'];
+            $chartDataMap[$d]['prot'] = (int)$row['total_protein'];
+            $chartDataMap[$d]['carb'] = (int)$row['total_carbs'];
+        }
+    }
+
+    // Flatten map to arrays
+    $historyCal = array_column($chartDataMap, 'cal');
+    $historyProt = array_column($chartDataMap, 'prot');
+    $historyCarb = array_column($chartDataMap, 'carb');
+
+    echo json_encode([
+        'goals' => $dailyGoal,
+        'daily' => $dailyIntake,
+        'weekly' => [
+            'calories' => (int)($wIntake['val_cal'] ?? 0),
+            'protein' => (int)($wIntake['val_prot'] ?? 0),
+            'carbs' => (int)($wIntake['val_carb'] ?? 0),
+        ],
+        'charts' => [
+            'dates' => $historyDates,
+            'calories' => $historyCal,
+            'protein' => $historyProt,
+            'carbs' => $historyCarb
+        ]
+    ]);
+    exit();
+}
+
 // ---------------------------------------------------------
-// 1. FETCH WEIGHT HISTORY FOR THE GRAPH
+// 1. FETCH WEIGHT HISTORY (Server Side is fine for general history)
 // ---------------------------------------------------------
 $weight_data = [];
 $weight_labels = [];
 
-// Check if the weight_logs table exists to avoid crashing if you haven't created it yet
 $tableCheck = $connect->query("SHOW TABLES LIKE 'weight_logs'");
-
 if ($tableCheck && $tableCheck->num_rows > 0) {
     $weight_sql = "SELECT weight, DATE_FORMAT(date_logged, '%b %d') as log_date 
-                   FROM weight_logs 
-                   WHERE user_id = ? 
-                   ORDER BY date_logged ASC";
+                   FROM weight_logs WHERE user_id = ? ORDER BY date_logged ASC";
     $stmt = $connect->prepare($weight_sql);
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $result = $stmt->get_result();
-
     while ($row = $result->fetch_assoc()) {
         $weight_data[] = (float)$row['weight'];
         $weight_labels[] = $row['log_date'];
@@ -43,28 +143,14 @@ if ($tableCheck && $tableCheck->num_rows > 0) {
     $stmt->close();
 }
 
-// Fallback: If no history exists, just show the current profile weight
+// Fallback if no history
 if (empty($weight_data)) {
     $weight_data[] = (float)($user['weight'] ?? 0);
     $weight_labels[] = "Current";
 }
 
-// Prepare JSON for JavaScript
 $weight_data_json = json_encode($weight_data);
 $weight_labels_json = json_encode($weight_labels);
-
-// ---------------------------------------------------------
-// 2. PRE-CALCULATE WEEKLY GOALS
-// ---------------------------------------------------------
-$weekly_calories_goal = ($dailyGoal['calories'] ?? 2000) * 7;
-$weekly_protein_goal = ($dailyGoal['protein'] ?? 150) * 7;
-$weekly_carbs_goal = ($dailyGoal['carbs'] ?? 250) * 7;
-
-// Current Weekly Intake (from fetch_goals.php)
-$weekly_calories_current = $weeklyIntake['calories'] ?? 0;
-$weekly_protein_current = $weeklyIntake['protein'] ?? 0;
-$weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
-
 ?>
 
 <!DOCTYPE html>
@@ -90,13 +176,44 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
     <style>
         .progress-bar-fill { transition: width 1s ease-in-out; }
         .avatar-hover:hover { transform: scale(1.02); transition: transform 0.2s; }
-        /* Scrollable charts container */
-        .chart-scroll-container {
+        
+        /* SCROLLABLE CHARTS */
+        .scrolling-wrapper {
+            display: flex;
+            flex-wrap: nowrap;
             overflow-x: auto;
-            padding-bottom: 10px;
+            -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+            padding-bottom: 1rem;
+            gap: 1rem;
         }
-        .chart-min-width {
-            min-width: 600px; 
+        
+        /* Card sizing for scroll */
+        .scrolling-card {
+            flex: 0 0 auto;
+            width: 85vw; /* Mobile: 85% of screen width */
+        }
+        
+        @media (min-width: 640px) {
+            .scrolling-card { width: 400px; } /* Desktop: Fixed width */
+        }
+
+        /* Visible Scrollbar Styles */
+        .scrolling-wrapper::-webkit-scrollbar {
+            height: 8px; /* Height of horizontal scrollbar */
+        }
+        
+        .scrolling-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .scrolling-wrapper::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .scrolling-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
         }
     </style>
 </head>
@@ -143,7 +260,6 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                             
                             <div class="bg-white rounded-2xl border border-gray-100 shadow-lg overflow-hidden relative">
                                 <div class="h-32 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-                                
                                 <div class="px-6 pb-6 relative">
                                     <div class="relative -mt-12 mb-4 flex justify-between items-end">
                                         <div class="relative group">
@@ -214,10 +330,10 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                                 <div class="w-6 h-6 rounded-full bg-yellow-200 flex items-center justify-center text-yellow-700 text-xs"><i class="fas fa-fire"></i></div>
                                                 <span class="text-sm font-medium text-gray-700">Calories</span>
                                             </div>
-                                            <span class="text-xs font-bold text-gray-800"><?= $weekly_calories_current ?> / <?= $weekly_calories_goal ?></span>
+                                            <span id="wkCalText" class="text-xs font-bold text-gray-800">...</span>
                                         </div>
                                         <div class="w-full bg-yellow-200 rounded-full h-1.5">
-                                            <div class="bg-yellow-500 h-1.5 rounded-full" style="width: <?= ($weekly_calories_goal > 0) ? min(100, ($weekly_calories_current / $weekly_calories_goal * 100)) : 0 ?>%"></div>
+                                            <div id="wkCalBar" class="bg-yellow-500 h-1.5 rounded-full" style="width: 0%"></div>
                                         </div>
                                     </div>
                                     <div class="p-3 bg-blue-50 rounded-xl">
@@ -226,10 +342,10 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                                 <div class="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs"><i class="fas fa-drumstick-bite"></i></div>
                                                 <span class="text-sm font-medium text-gray-700">Protein</span>
                                             </div>
-                                            <span class="text-xs font-bold text-gray-800"><?= $weekly_protein_current ?>g / <?= $weekly_protein_goal ?>g</span>
+                                            <span id="wkProtText" class="text-xs font-bold text-gray-800">...</span>
                                         </div>
                                         <div class="w-full bg-blue-200 rounded-full h-1.5">
-                                            <div class="bg-blue-500 h-1.5 rounded-full" style="width: <?= ($weekly_protein_goal > 0) ? min(100, ($weekly_protein_current / $weekly_protein_goal * 100)) : 0 ?>%"></div>
+                                            <div id="wkProtBar" class="bg-blue-500 h-1.5 rounded-full" style="width: 0%"></div>
                                         </div>
                                     </div>
                                     <div class="p-3 bg-green-50 rounded-xl">
@@ -238,16 +354,16 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                                 <div class="w-6 h-6 rounded-full bg-green-200 flex items-center justify-center text-green-700 text-xs"><i class="fas fa-bread-slice"></i></div>
                                                 <span class="text-sm font-medium text-gray-700">Carbs</span>
                                             </div>
-                                            <span class="text-xs font-bold text-gray-800"><?= $weekly_carbs_current ?>g / <?= $weekly_carbs_goal ?>g</span>
+                                            <span id="wkCarbText" class="text-xs font-bold text-gray-800">...</span>
                                         </div>
                                         <div class="w-full bg-green-200 rounded-full h-1.5">
-                                            <div class="bg-green-500 h-1.5 rounded-full" style="width: <?= ($weekly_carbs_goal > 0) ? min(100, ($weekly_carbs_current / $weekly_carbs_goal * 100)) : 0 ?>%"></div>
+                                            <div id="wkCarbBar" class="bg-green-500 h-1.5 rounded-full" style="width: 0%"></div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                        </div>
+                        </div> 
 
                         <div class="col-span-12 lg:col-span-8 space-y-6">
                             
@@ -257,7 +373,7 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                     <div class="z-10">
                                         <div class="text-yellow-500 mb-2 text-2xl"><i class="fas fa-fire-alt"></i></div>
                                         <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Daily Calories</p>
-                                        <h3 class="text-2xl font-extrabold text-gray-800 my-1"><?= $dailyGoal['calories'] ?></h3>
+                                        <h3 id="goalCalDisplay" class="text-2xl font-extrabold text-gray-800 my-1">...</h3>
                                         <span class="text-xs text-gray-500">kcal target</span>
                                     </div>
                                 </div>
@@ -266,7 +382,7 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                     <div class="z-10">
                                         <div class="text-blue-500 mb-2 text-2xl"><i class="fas fa-dumbbell"></i></div>
                                         <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Daily Protein</p>
-                                        <h3 class="text-2xl font-extrabold text-gray-800 my-1"><?= $dailyGoal['protein'] ?></h3>
+                                        <h3 id="goalProtDisplay" class="text-2xl font-extrabold text-gray-800 my-1">...</h3>
                                         <span class="text-xs text-gray-500">grams target</span>
                                     </div>
                                 </div>
@@ -275,7 +391,7 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                                     <div class="z-10">
                                         <div class="text-green-500 mb-2 text-2xl"><i class="fas fa-wheat"></i></div>
                                         <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Daily Carbs</p>
-                                        <h3 class="text-2xl font-extrabold text-gray-800 my-1"><?= $dailyGoal['carbs'] ?></h3>
+                                        <h3 id="goalCarbDisplay" class="text-2xl font-extrabold text-gray-800 my-1">...</h3>
                                         <span class="text-xs text-gray-500">grams target</span>
                                     </div>
                                 </div>
@@ -284,66 +400,71 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                             <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                                 <h3 class="text-lg font-bold text-gray-800 mb-6 border-b pb-2">Daily Progress</h3>
                                 
-                                <div class="space-y-6">
-                                    <div>
-                                        <div class="flex justify-between text-xs mb-1">
-                                            <span class="font-medium text-gray-700">Calories</span>
+                                <div class="space-y-4">
+                                    <div class="p-3 bg-yellow-50 rounded-xl">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-yellow-200 flex items-center justify-center text-yellow-700 text-xs"><i class="fas fa-fire"></i></div>
+                                                <span class="text-sm font-medium text-gray-700">Calories</span>
+                                            </div>
                                             <div>
-                                                <span class="font-bold text-gray-900"><?= $dailyIntake['calories'] ?></span> 
-                                                <span class="text-gray-400">/ <?= $dailyGoal['calories'] ?> kcal</span>
+                                                <span id="dailyCalVal" class="text-xs font-bold text-gray-800">0</span>
+                                                <span id="dailyCalTarget" class="text-xs text-gray-500">/ 0 kcal</span>
                                             </div>
                                         </div>
-                                        <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                                            <div class="progress-bar-fill h-3 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500" style="width: <?= $calories_percentage_daily ?>%"></div>
+                                        <div class="w-full bg-yellow-200 rounded-full h-1.5">
+                                            <div id="dailyCalBar" class="bg-yellow-500 h-1.5 rounded-full progress-bar-fill" style="width: 0%"></div>
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <div class="flex justify-between text-xs mb-1">
-                                            <span class="font-medium text-gray-700">Protein</span>
+                                    <div class="p-3 bg-blue-50 rounded-xl">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs"><i class="fas fa-dumbbell"></i></div>
+                                                <span class="text-sm font-medium text-gray-700">Protein</span>
+                                            </div>
                                             <div>
-                                                <span class="font-bold text-gray-900"><?= $dailyIntake['protein'] ?></span> 
-                                                <span class="text-gray-400">/ <?= $dailyGoal['protein'] ?> g</span>
+                                                <span id="dailyProtVal" class="text-xs font-bold text-gray-800">0</span>
+                                                <span id="dailyProtTarget" class="text-xs text-gray-500">/ 0 g</span>
                                             </div>
                                         </div>
-                                        <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                                            <div class="progress-bar-fill h-3 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500" style="width: <?= $protein_percentage_daily ?>%"></div>
+                                        <div class="w-full bg-blue-200 rounded-full h-1.5">
+                                            <div id="dailyProtBar" class="bg-blue-500 h-1.5 rounded-full progress-bar-fill" style="width: 0%"></div>
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <div class="flex justify-between text-xs mb-1">
-                                            <span class="font-medium text-gray-700">Carbs</span>
+                                    <div class="p-3 bg-green-50 rounded-xl">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-green-200 flex items-center justify-center text-green-700 text-xs"><i class="fas fa-bread-slice"></i></div>
+                                                <span class="text-sm font-medium text-gray-700">Carbs</span>
+                                            </div>
                                             <div>
-                                                <span class="font-bold text-gray-900"><?= $dailyIntake['carbs'] ?></span> 
-                                                <span class="text-gray-400">/ <?= $dailyGoal['carbs'] ?> g</span>
+                                                <span id="dailyCarbVal" class="text-xs font-bold text-gray-800">0</span>
+                                                <span id="dailyCarbTarget" class="text-xs text-gray-500">/ 0 g</span>
                                             </div>
                                         </div>
-                                        <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                                            <div class="progress-bar-fill h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500" style="width: <?= $carbs_percentage_daily ?>%"></div>
+                                        <div class="w-full bg-green-200 rounded-full h-1.5">
+                                            <div id="dailyCarbBar" class="bg-green-500 h-1.5 rounded-full progress-bar-fill" style="width: 0%"></div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
-                                <h3 class="text-lg font-bold text-gray-800 mb-4">History Trends</h3>
-                                <div class="chart-scroll-container">
-                                    <div class="chart-min-width space-y-8">
-                                        <div>
-                                            <h4 class="text-sm font-semibold text-gray-600 mb-2">Calories History</h4>
-                                            <div id="calorie-chart" class="w-full h-48"></div>
-                                        </div>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <h4 class="text-sm font-semibold text-gray-600 mb-2">Protein History</h4>
-                                                <div id="protein-chart" class="w-full h-40"></div>
-                                            </div>
-                                            <div>
-                                                <h4 class="text-sm font-semibold text-gray-600 mb-2">Carbs History</h4>
-                                                <div id="carbs-chart" class="w-full h-40"></div>
-                                            </div>
-                                        </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800 mb-4 ml-1">History Trends (Last 7 Days)</h3>
+                                <div class="scrolling-wrapper">
+                                    <div class="scrolling-card bg-white rounded-2xl border border-gray-200 shadow-lg p-4">
+                                        <h4 class="text-sm font-semibold text-gray-600 mb-2">Calories</h4>
+                                        <div id="calorie-chart" class="w-full h-48"></div>
+                                    </div>
+                                    <div class="scrolling-card bg-white rounded-2xl border border-gray-200 shadow-lg p-4">
+                                        <h4 class="text-sm font-semibold text-gray-600 mb-2">Protein</h4>
+                                        <div id="protein-chart" class="w-full h-48"></div>
+                                    </div>
+                                    <div class="scrolling-card bg-white rounded-2xl border border-gray-200 shadow-lg p-4">
+                                        <h4 class="text-sm font-semibold text-gray-600 mb-2">Carbs</h4>
+                                        <div id="carbs-chart" class="w-full h-48"></div>
                                     </div>
                                 </div>
                             </div>
@@ -365,15 +486,15 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
             <form action="php_action/save_goal.php" method="POST" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Calorie Target (kcal)</label>
-                    <input type="number" name="calories" value="<?= $dailyGoal['calories'] ?>" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
+                    <input type="number" id="inputGoalCal" name="calories" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Protein Target (g)</label>
-                    <input type="number" name="protein" value="<?= $dailyGoal['protein'] ?>" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
+                    <input type="number" id="inputGoalProt" name="protein" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Carbs Target (g)</label>
-                    <input type="number" name="carbs" value="<?= $dailyGoal['carbs'] ?>" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
+                    <input type="number" id="inputGoalCarb" name="carbs" required class="w-full px-4 py-2 border rounded-lg focus:ring-indigo-500">
                 </div>
                 <div class="flex justify-end space-x-3 mt-6">
                     <button type="button" onclick="toggleModal('goalModal', false)" class="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancel</button>
@@ -389,7 +510,6 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                 <h3 class="text-2xl font-bold text-gray-800">Edit Profile</h3>
                 <button onclick="toggleModal('editModal', false)" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
             </div>
-            
             <form id="editProfileForm" class="space-y-4">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -419,9 +539,7 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                     <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">Save Details</button>
                 </div>
             </form>
-
             <hr class="my-6 border-gray-200">
-
             <h4 class="text-lg font-semibold text-gray-800 mb-3">Update Photo</h4>
             <form id="updateProfileImageForm" class="flex items-center gap-4">
                 <div class="shrink-0">
@@ -452,32 +570,97 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
     </div>
 
     <script>
-        // --- CHARTS ---
-        var dates = <?= $dates_json ?>;
-        var calories = <?= $calories_json ?>;
-        var protein = <?= $protein_json ?>;
-        var carbs = <?= $carbs_json ?>;
+        // --- 1. Client Date Function ---
+        function getClientDate() {
+            const now = new Date();
+            const offset = now.getTimezoneOffset();
+            const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+            return localDate.toISOString().split('T')[0];
+        }
 
-        function createChart(containerId, data, color, name, height = 200) {
+        // --- 2. Fetch Data (Timezone Synced) ---
+        async function fetchGoalsData() {
+            const date = getClientDate();
+            try {
+                // Call self with query param
+                const response = await fetch(`goals.php?fetch_goals_data=1&date=${date}`);
+                const data = await response.json();
+                
+                updateUI(data);
+                renderHistoryCharts(data.charts);
+            } catch (e) {
+                console.error("Fetch error:", e);
+            }
+        }
+
+        function updateUI(data) {
+            // Update Goals Display
+            document.getElementById('goalCalDisplay').innerText = data.goals.calories;
+            document.getElementById('goalProtDisplay').innerText = data.goals.protein;
+            document.getElementById('goalCarbDisplay').innerText = data.goals.carbs;
+
+            // Prefill Goal Modal Inputs
+            document.getElementById('inputGoalCal').value = data.goals.calories;
+            document.getElementById('inputGoalProt').value = data.goals.protein;
+            document.getElementById('inputGoalCarb').value = data.goals.carbs;
+
+            // Update Daily Progress Bars
+            document.getElementById('dailyCalVal').innerText = data.daily.calories;
+            document.getElementById('dailyCalTarget').innerText = `/ ${data.goals.calories} kcal`;
+            updateBar('dailyCalBar', data.daily.calories, data.goals.calories);
+
+            document.getElementById('dailyProtVal').innerText = data.daily.protein;
+            document.getElementById('dailyProtTarget').innerText = `/ ${data.goals.protein} g`;
+            updateBar('dailyProtBar', data.daily.protein, data.goals.protein);
+
+            document.getElementById('dailyCarbVal').innerText = data.daily.carbs;
+            document.getElementById('dailyCarbTarget').innerText = `/ ${data.goals.carbs} g`;
+            updateBar('dailyCarbBar', data.daily.carbs, data.goals.carbs);
+
+            // Update Weekly Summary
+            const wkCalGoal = data.goals.calories * 7;
+            const wkProtGoal = data.goals.protein * 7;
+            const wkCarbGoal = data.goals.carbs * 7;
+
+            document.getElementById('wkCalText').innerText = `${data.weekly.calories} / ${wkCalGoal}`;
+            updateBar('wkCalBar', data.weekly.calories, wkCalGoal);
+
+            document.getElementById('wkProtText').innerText = `${data.weekly.protein}g / ${wkProtGoal}g`;
+            updateBar('wkProtBar', data.weekly.protein, wkProtGoal);
+
+            document.getElementById('wkCarbText').innerText = `${data.weekly.carbs}g / ${wkCarbGoal}g`;
+            updateBar('wkCarbBar', data.weekly.carbs, wkCarbGoal);
+        }
+
+        function updateBar(elementId, val, max) {
+            const pct = max > 0 ? Math.min(100, (val / max) * 100) : 0;
+            document.getElementById(elementId).style.width = pct + "%";
+        }
+
+        // --- 3. Charts ---
+        function renderHistoryCharts(chartData) {
+            createChart("#calorie-chart", chartData.calories, chartData.dates, "#F59E0B", "Calories", 180).render();
+            createChart("#protein-chart", chartData.protein, chartData.dates, "#3B82F6", "Protein", 180).render();
+            createChart("#carbs-chart", chartData.carbs, chartData.dates, "#10B981", "Carbs", 180).render();
+        }
+
+        function createChart(containerId, data, dates, color, name, height) {
+            document.querySelector(containerId).innerHTML = ""; // Clear existing
             return new ApexCharts(document.querySelector(containerId), {
                 series: [{ name: name, data: data }],
                 chart: { type: "area", height: height, toolbar: { show: false }, zoom: { enabled: false } },
                 dataLabels: { enabled: false },
                 stroke: { curve: 'smooth', width: 2 },
-                fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] } },
+                fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3 } },
                 colors: [color],
-                xaxis: { categories: dates, labels: { show: false }, axisBorder: { show: false }, axisTicks: { show: false } },
+                xaxis: { categories: dates, labels: { show: true, rotate: -45, style: {fontSize: '10px'} }, axisBorder: { show: false }, axisTicks: { show: false } },
                 yaxis: { show: false },
                 grid: { show: false },
                 tooltip: { theme: "light" }
             });
         }
 
-        createChart("#calorie-chart", calories, "#F59E0B", "Calories", 180).render();
-        createChart("#protein-chart", protein, "#3B82F6", "Protein", 150).render();
-        createChart("#carbs-chart", carbs, "#10B981", "Carbs", 150).render();
-
-        // --- WEIGHT CHART (Using History Data) ---
+        // --- Weight Chart (Server Side Data) ---
         var weightHistory = <?= $weight_data_json ?>;
         var weightDates = <?= $weight_labels_json ?>;
 
@@ -486,28 +669,15 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
             chart: { type: "area", height: 160, toolbar: { show: false } },
             dataLabels: { enabled: false },
             stroke: { curve: 'smooth', width: 3 },
-            fill: {
-                type: "gradient",
-                gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3 }
-            },
+            fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3 } },
             colors: ["#6366f1"],
-            xaxis: { 
-                categories: weightDates, 
-                labels: { show: false }, 
-                tooltip: { enabled: false },
-                axisBorder: { show: false },
-                axisTicks: { show: false }
-            },
+            xaxis: { categories: weightDates, labels: { show: false }, axisBorder: { show: false }, axisTicks: { show: false } },
             yaxis: { show: false },
             grid: { show: false, padding: { left: 0, right: 0 } },
-            tooltip: { 
-                theme: "light",
-                y: { formatter: function (val) { return val + " kg" } }
-            }
+            tooltip: { theme: "light", y: { formatter: function (val) { return val + " kg" } } }
         }).render();
 
-
-        // --- MODAL LOGIC ---
+        // --- Modal & Form Logic (Preserved) ---
         function toggleModal(modalId, show) {
             const modal = document.getElementById(modalId);
             if (show) {
@@ -526,9 +696,7 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
             $("#editWeight").val($("#weightDisplay").text().replace(" kg", ""));
         }
 
-        // --- AJAX FORMS ---
-
-        // 1. Edit Profile Details
+        // --- AJAX Forms ---
         $("#editProfileForm").on("submit", function(e) {
             e.preventDefault();
             $.ajax({
@@ -539,26 +707,19 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                 success: function(response) {
                     if (response.success) {
                         Swal.fire({ icon: 'success', title: 'Updated!', text: 'Profile details saved.', timer: 1500, showConfirmButton: false });
-                        
-                        // Update UI instantly
                         $("#firstNameDisplay").text(response.updatedData.first_name);
                         $("#lastNameDisplay").text(response.updatedData.last_name);
                         $("#ageDisplay").text(response.updatedData.age);
                         $("#heightDisplay").text(response.updatedData.height);
                         $("#weightDisplay").text(response.updatedData.weight);
-                        
                         toggleModal('editModal', false);
                     } else {
                         Swal.fire({ icon: 'error', title: 'Error', text: response.messages });
                     }
-                },
-                error: function() {
-                    Swal.fire({ icon: 'error', title: 'Error', text: 'Could not update profile.' });
                 }
             });
         });
 
-        // 2. Upload Avatar
         $("#updateProfileImageForm").on("submit", function(e) {
             e.preventDefault();
             var formData = new FormData(this);
@@ -577,19 +738,13 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                     } else {
                         Swal.fire({ icon: 'error', title: 'Upload Failed', text: response.messages });
                     }
-                },
-                error: function() {
-                    Swal.fire({ icon: 'error', title: 'Error', text: 'Server error during upload.' });
                 }
             });
         });
 
-        // 3. Update Weight (Uses same endpoint but triggers chart refresh)
         $("#logWeightForm").on("submit", function(e) {
             e.preventDefault();
             let newWeight = $("#logWeightInput").val();
-            
-            // Build data object using current profile info + new weight
             let currentData = {
                 first_name: $("#firstNameDisplay").text(),
                 last_name: $("#lastNameDisplay").text(),
@@ -608,8 +763,6 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
                         Swal.fire({ icon: 'success', title: 'Logged!', text: 'Current weight updated.', timer: 1500, showConfirmButton: false });
                         $("#weightDisplay").text(newWeight);
                         toggleModal('weightModal', false);
-                        
-                        // Reload to refresh graph with new history point
                         setTimeout(() => location.reload(), 1000); 
                     } else {
                         Swal.fire({ icon: 'error', title: 'Error', text: response.messages });
@@ -618,18 +771,17 @@ $weekly_carbs_current = $weeklyIntake['carbs'] ?? 0;
             });
         });
 
-        // Image Preview in Modal
         $("#editAvatar").on('change', function(){
             const file = this.files[0];
             if (file){
                 let reader = new FileReader();
-                reader.onload = function(event){
-                    $('#editAvatarPreview').attr('src', event.target.result);
-                }
+                reader.onload = function(event){ $('#editAvatarPreview').attr('src', event.target.result); }
                 reader.readAsDataURL(file);
             }
         });
 
+        // INIT
+        document.addEventListener("DOMContentLoaded", fetchGoalsData);
     </script>
 </body>
 </html>
